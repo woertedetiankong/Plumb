@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plumb · Briefing: refunds</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="briefing">
+<header id="site-header" class="site-header"></header>
+
+<main class="page">
+  <div class="split">
+
+    <aside class="rail stack-sm" aria-label="About this briefing">
+      <a class="link-back" href="index.html"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="m11 18-6-6 6-6"/></svg>Back to the map</a>
+
+      <div class="card rail-card">
+        <p class="eyebrow">Briefing</p>
+        <p class="rail-area mono">payments/refunds</p>
+        <p class="muted small">plus webhooks and db/migrations</p>
+        <ol class="steps">
+          <li class="current"><span class="step-num">1</span>What changed</li>
+          <li><span class="step-num">2</span>Decisions for you<span class="count" id="decided-count">0 of 3</span></li>
+          <li><span class="step-num">3</span>Check yourself</li>
+        </ol>
+      </div>
+
+      <div class="card rail-card">
+        <p class="eyebrow">Built from 3 sessions</p>
+        <ul class="sessions">
+          <li>
+            <p class="session-agent">Claude Code</p>
+            <p class="session-title">Add automatic retries to refunds</p>
+            <p class="session-meta">52 min · 9 files</p>
+          </li>
+          <li>
+            <p class="session-agent">Claude Code</p>
+            <p class="session-title">Fix flaky refund tests</p>
+            <p class="session-meta">18 min · 3 files<span class="pill-warn">removed a check</span></p>
+          </li>
+          <li>
+            <p class="session-agent">Codex</p>
+            <p class="session-title">Refund history for support</p>
+            <p class="session-meta">34 min · 5 files</p>
+          </li>
+        </ul>
+      </div>
+    </aside>
+
+    <div class="main-col stack-md">
+      <div>
+        <p class="muted small">While you were away · 3 sessions · 17 files · about 4 minutes</p>
+        <h1 class="brief-title">Refunds now retry on their own. One change needs your call.</h1>
+      </div>
+
+      <section class="card card-lg" aria-labelledby="para-title">
+        <h2 id="para-title" class="eyebrow section-eyebrow">In one paragraph</h2>
+        <p class="para">When the payment provider times out, refunds now retry automatically, waiting longer each time. Every attempt is saved in a new <code>refund_attempts</code> table so support can see what happened. To get the tests passing, one session also removed the check that stops a customer from being refunded twice.</p>
+      </section>
+
+      <section class="card card-lg" aria-labelledby="flow-title">
+        <h2 id="flow-title" class="eyebrow section-eyebrow">How it fits now</h2>
+        <div class="flow">
+          <div>
+            <p class="lane-label" id="lane-refund">When support clicks Refund</p>
+            <ol class="lane" aria-labelledby="lane-refund">
+              <li class="node">Refund button<small>web/ui</small></li>
+              <li class="arrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></li>
+              <li class="node">RefundService.issue()</li>
+              <li class="arrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></li>
+              <li class="node">Payment provider</li>
+              <li class="arrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></li>
+              <li class="node node-new">refund_attempts<span class="tag tag-new">NEW</span></li>
+            </ol>
+            <p class="lane-note"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>New: if the provider times out, retry after 2, 4, 8, 16 and 32 seconds</p>
+          </div>
+          <div>
+            <p class="lane-label" id="lane-webhook">When the provider calls back</p>
+            <ol class="lane" aria-labelledby="lane-webhook">
+              <li class="node">Provider webhook</li>
+              <li class="arrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></li>
+              <li class="node">WebhookHandler</li>
+              <li class="arrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></li>
+              <li class="node node-removed"><s>Duplicate check</s><span class="tag tag-removed">REMOVED</span></li>
+              <li class="arrow" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></li>
+              <li class="node">Issue refund</li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <section class="decisions" aria-labelledby="decisions-title">
+        <div>
+          <h2 id="decisions-title" class="section-title">Decisions made for you</h2>
+          <p class="section-sub">Ranked by stakes. Your answers go straight back to the agents.</p>
+        </div>
+        <div id="decision-list" class="decisions"></div>
+      </section>
+
+      <section class="card card-lg" aria-labelledby="fyi-title">
+        <h2 id="fyi-title" class="section-eyebrow" style="font-size: 15px; font-weight: 600;">Also changed, low stakes</h2>
+        <ul class="fyi-list">
+          <li><span>Renamed <code>RefundService.run()</code> to <code>issue()</code></span><span class="file">refunds/service.ts</span></li>
+          <li><span>Added 11 tests for retry timing</span><span class="file">refunds/retry.test.ts</span></li>
+        </ul>
+      </section>
+
+      <section class="skipped" aria-label="Skipped for you">
+        <div class="grow">
+          <p style="font-weight: 600;">Skipped for you: 18 files in web/ui</p>
+          <p class="muted" style="margin-top: 2px; font-size: 14px;">Button labels and the refund status badge. Low stakes, and tests and screenshots pass.</p>
+        </div>
+        <button class="btn" type="button" data-todo="Showing skipped files">Show anyway</button>
+      </section>
+
+      <div class="cta-bar">
+        <div class="grow">
+          <p class="cta-title" id="cta-title">Done reading? Check your understanding.</p>
+          <p class="cta-sub">One question. Answer it and payments/refunds moves forward on your map.</p>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-lg btn-ghost-dark" type="button" data-todo="Saving the briefing for later">Later</button>
+          <a class="btn btn-lg btn-on-dark" href="check.html">Check my understanding<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<footer id="site-footer" class="site-footer"></footer>
+<script src="common.js"></script>
+<script src="briefing.js"></script>
+</body>
+</html>

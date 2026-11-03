@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plumb · Explain it back</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="briefing">
+<header id="site-header" class="site-header"></header>
+
+<main class="page stack-sm">
+  <a class="link-back" href="briefing.html"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="m11 18-6-6 6-6"/></svg>Back to the briefing</a>
+
+  <div class="split">
+    <section class="card question-card main-col" aria-labelledby="question">
+      <p class="eyebrow">Explain it back · payments/refunds · 1 question</p>
+      <div>
+        <p class="question-lead">With the code as it is right now:</p>
+        <h1 id="question" class="question">A refund times out. The retry goes through. Then the provider's original webhook arrives late. What happens?</h1>
+      </div>
+      <div id="answers" class="answers" role="group" aria-labelledby="question"></div>
+      <div id="feedback" class="feedback" hidden></div>
+    </section>
+
+    <aside id="side" class="card side-card side-col" aria-label="Your map"></aside>
+  </div>
+</main>
+
+<footer id="site-footer" class="site-footer"></footer>
+<script src="common.js"></script>
+<script src="check.js"></script>
+</body>
+</html>

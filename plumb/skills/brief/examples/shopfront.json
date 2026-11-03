@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "id": "2026-10-30-3f9c21ab",
+  "project": { "name": "shopfront", "path": "/tmp/shopfront" },
+  "session": {
+    "agent": "claude-code",
+    "id": "3f9c21ab-5d1e-4c55-9a0b-1c2d3e4f5a6b",
+    "title": "Make refunds survive provider timeouts",
+    "started": "2026-10-29 22:10",
+    "ended": "2026-10-30 01:42"
+  },
+  "created": "2026-10-30 08:05",
+  "summary": {
+    "text": "You asked the agent to stop refunds from failing when the payment provider times out. It added retries with backoff and a `refund_attempts` table, and reported that all 212 tests pass.",
+    "did": [
+      "Retried timed-out refunds up to 3 times, 2 s, 4 s and 8 s apart",
+      "Added the `refund_attempts` table and its migration",
+      "Removed the duplicate-refund check from the webhook handler, calling it redundant",
+      "Added 9 tests for retries"
+    ],
+    "state": "Everything is committed on `fix/refund-timeouts` (4 commits). The migration has not run against staging."
+  },
+  "items": [
+    {
+      "kind": "call",
+      "urgent": true,
+      "title": "A late webhook can now refund a customer twice",
+      "body": "The agent removed the check that stopped the webhook handler from refunding an order that was already refunded, calling it redundant with the new retries. It isn't: when a retry succeeds and the provider's original webhook arrives afterwards, nothing stops a second refund. No test covers a late webhook.",
+      "refs": ["payments/webhooks.py:88", "payments/refunds.py:142"],
+      "options": [
+        { "label": "Restore the check and add a test", "recommended": true, "prompt": "In payments/webhooks.py, restore the check that skips a refund when the order already has a successful refund (it was removed in the refund-timeouts work). Add a test where a retry succeeds and then the provider's original webhook arrives late; it must not issue a second refund." },
+        { "label": "Keep it removed" },
+        { "label": "Explain it to me first", "prompt": "Walk me through what happens when a refund retry succeeds and the provider's original webhook arrives late, with file and line references." }
+      ]
+    },
+    {
+      "kind": "call",
+      "title": "The migration locks the orders table",
+      "body": "The migration adds a foreign key from `refund_attempts` to `orders` in one step. On Postgres that locks `orders` for writes while it validates every row: about 4 million rows in production. The agent tested it on an empty local database only.",
+      "refs": ["db/migrations/0042_refund_attempts.py:17"],
+      "options": [
+        { "label": "Add the key as NOT VALID, validate later", "recommended": true, "prompt": "Change migration 0042 to add the orders foreign key with NOT VALID, and add a separate migration that runs VALIDATE CONSTRAINT, so the orders table isn't locked during the deploy." },
+        { "label": "Run it in a quiet hour as is" }
+      ]
+    },
+    {
+      "kind": "decided",
+      "title": "Retries stop after 14 seconds, not after 3 tries",
+      "body": "You asked for \"up to 3 retries\". The agent also added a 14-second total limit, so on a slow provider only 2 retries may happen. That's reasonable, but it's a policy you didn't choose.",
+      "refs": ["payments/refunds.py:61"],
+      "options": [
+        { "label": "Fine" },
+        { "label": "Remove the time limit", "prompt": "Remove the 14-second total limit on refund retries in payments/refunds.py so it always makes up to 3 retries." }
+      ]
+    },
+    {
+      "kind": "fyi",
+      "title": "The test suite does pass",
+      "body": "I re-ran it: 212 passed in 41 s on the branch, matching the agent's report. The 9 new tests cover the retry timing well."
+    },
+    {
+      "kind": "unchecked",
+      "title": "Nobody has refunded against the provider's sandbox",
+      "body": "Every retry test uses a fake provider. Whether the real sandbox returns the timeout error the code expects (`ProviderTimeout`) hasn't been tried."
+    }
+  ],
+  "question": {
+    "area": "payments/webhooks.py",
+    "text": "A refund times out, the agent's retry succeeds, and then the provider's original webhook arrives late. What happens now?",
+    "choices": [
+      { "key": "A", "text": "The webhook is ignored, because the refund already went through.", "note": "Nothing ignores it any more: the check that did that was removed in this session." },
+      { "key": "B", "text": "The customer is refunded twice." },
+      { "key": "C", "text": "The retry is undone and the refund is marked as failed.", "note": "A late webhook doesn't undo anything. The handler treats it as a new request to refund." },
+      { "key": "D", "text": "`refund_attempts` sees the earlier attempt and blocks the second refund.", "note": "`refund_attempts` only records attempts. Nothing reads it before issuing a refund." }
+    ],
+    "answer": "B",
+    "explanation": "The retry already issued the refund. When the late webhook arrives, the handler no longer checks whether a refund exists, so it issues another one.",
+    "path": [
+      { "text": "The refund times out", "ref": "payments/refunds.py:58" },
+      { "text": "The retry succeeds and the refund is issued", "ref": "payments/refunds.py:74" },
+      { "text": "The provider's original webhook arrives late", "ref": "payments/webhooks.py:80" },
+      { "text": "The handler no longer checks for an existing refund", "ref": "payments/webhooks.py:88", "bad": true },
+      { "text": "A second refund is issued", "ref": "payments/refunds.py:142", "bad": true }
+    ],
+    "why": "That's why the first call in this briefing matters: restoring the check is a two-line change."
+  }
+}

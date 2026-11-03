@@ -1,0 +1,12 @@
+{
+  "name": "plumb",
+  "owner": { "name": "woerte", "url": "https://github.com/woertedetiankong" },
+  "description": "Plumb: briefings that help you understand the code your coding agents write.",
+  "plugins": [
+    {
+      "name": "plumb",
+      "source": "./plumb",
+      "description": "Briefings on what your coding agents did, checked against your project as it is now."
+    }
+  ]
+}

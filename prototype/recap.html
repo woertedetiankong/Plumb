@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plumb · Your October</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="recap">
+<header id="site-header" class="site-header"></header>
+
+<main class="page recap-page">
+  <article class="recap" aria-label="Your October in Plumb">
+    <div class="recap-top">
+      <span class="recap-brand"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1.5V4"/><path d="M7 9a5 5 0 0 1 10 0c0 3-2.5 7-5 12.5C9.5 16 7 12 7 9z"/></svg>Plumb</span>
+      <span class="recap-meta">October 2026 · shopfront</span>
+    </div>
+
+    <div>
+      <p class="recap-eyebrow">Your month with your agents</p>
+      <h1>You kept up with your agents.</h1>
+      <p class="recap-sub">They made 312 decisions in October. You made the 41 that mattered, and you now understand 4 more areas of shopfront.</p>
+    </div>
+
+    <div>
+      <div class="maps">
+        <div>
+          <p class="map-label">October 1</p>
+          <div id="map-before" class="mini-map" role="img"></div>
+        </div>
+        <span class="arrow-big" aria-hidden="true"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span>
+        <div>
+          <p class="map-label">October 31</p>
+          <div id="map-after" class="mini-map" role="img"></div>
+        </div>
+      </div>
+      <div class="recap-legend">
+        <span><i class="s-solid" aria-hidden="true"></i>Solid</span>
+        <span><i class="s-thin" aria-hidden="true"></i>Thin</span>
+        <span><i class="s-gap" aria-hidden="true"></i>Gap</span>
+        <span><i class="s-ok" aria-hidden="true"></i>Covered by tests</span>
+      </div>
+    </div>
+
+    <div class="recap-stats">
+      <div>
+        <p class="recap-num">41</p>
+        <p class="recap-stat-label">decisions you made</p>
+      </div>
+      <div>
+        <p class="recap-num">19</p>
+        <p class="recap-stat-label">briefings, 2.8 minutes on average</p>
+      </div>
+      <div>
+        <p class="recap-num warm">3</p>
+        <p class="recap-stat-label">gaps closed</p>
+      </div>
+    </div>
+
+    <div>
+      <p class="recap-eyebrow cool">Picked up along the way</p>
+      <div class="recap-chips">
+        <span>idempotency keys</span>
+        <span>exponential backoff</span>
+        <span>Postgres advisory locks</span>
+        <span>refresh-token rotation</span>
+        <span>webhook signatures</span>
+        <span>optimistic locking</span>
+      </div>
+    </div>
+
+    <div class="recap-dark">
+      <i class="s-gap" aria-hidden="true"></i>
+      <p><strong>Still dark: db/migrations.</strong> Agents wrote all of it and you haven't looked yet. A 5-minute walkthrough is waiting.</p>
+    </div>
+
+    <div class="recap-foot">
+      <span>Know the code your agents write.</span>
+      <span class="mono">plumb</span>
+    </div>
+  </article>
+
+  <div class="btn-row">
+    <button class="btn" type="button" data-todo="Downloading the card as an image">Download image</button>
+    <button class="btn" type="button" data-todo="Sharing the card">Share</button>
+  </div>
+</main>
+
+<footer id="site-footer" class="site-footer"></footer>
+<script src="common.js"></script>
+<script src="recap.js"></script>
+</body>
+</html>

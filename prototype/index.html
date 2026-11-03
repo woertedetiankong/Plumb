@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plumb · Your map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="map">
+<header id="site-header" class="site-header"></header>
+
+<main class="page stack">
+  <section id="banner" class="banner" aria-label="While you were away"></section>
+
+  <div class="title-row">
+    <div class="grow">
+      <h1 class="page-title">What you actually understand in shopfront</h1>
+      <p class="lede">Your name is on 81% of the commits, but agents wrote most of that code. Each area is colored by whether you understand it as deeply as its stakes require.</p>
+    </div>
+    <div class="stats">
+      <div class="stat">
+        <p class="stat-num" id="stat-need"></p>
+        <p class="stat-label">areas need you</p>
+      </div>
+      <div class="stat">
+        <p class="stat-num is-gap" id="stat-gaps"></p>
+        <p class="stat-label" id="stat-gaps-label">gaps in high-stakes code</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="split">
+    <section class="card main-col" aria-labelledby="map-title">
+      <div class="card-head">
+        <h2 id="map-title">Understanding map</h2>
+        <p class="muted small">13 areas · sized by lines of code · select one for details</p>
+      </div>
+      <div id="treemap" class="treemap"></div>
+      <div class="legend">
+        <span><i class="swatch s-solid" aria-hidden="true"></i>Solid: understood as deeply as it needs</span>
+        <span><i class="swatch s-thin" aria-hidden="true"></i>Thin: one level short</span>
+        <span><i class="swatch s-gap" aria-hidden="true"></i>Gap: high stakes, not understood</span>
+        <span><i class="swatch s-ok" aria-hidden="true"></i>Covered: low stakes, tests cover it</span>
+        <span><span class="bars" aria-hidden="true"><span class="bar have"></span><span class="bar missing"></span><span class="bar extra"></span></span>Bars: contract, shape, every line. Dashed means needed but missing.</span>
+      </div>
+    </section>
+
+    <aside id="panel" class="card side-col panel" aria-label="Selected area"></aside>
+  </div>
+</main>
+
+<footer id="site-footer" class="site-footer"></footer>
+<script src="common.js"></script>
+<script src="map.js"></script>
+</body>
+</html>

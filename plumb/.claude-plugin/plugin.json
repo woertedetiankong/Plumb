@@ -6,5 +6,6 @@
   "author": { "name": "woerte", "url": "https://github.com/woertedetiankong" },
   "homepage": "https://github.com/woertedetiankong/Plumb",
   "repository": "https://github.com/woertedetiankong/Plumb",
+  "license": "MIT",
   "keywords": ["briefing", "code review", "agents", "understanding"]
 }

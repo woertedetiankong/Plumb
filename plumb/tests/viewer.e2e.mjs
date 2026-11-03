@@ -71,6 +71,9 @@ check("picking an option presses it", (await ev("document.querySelector('.opt[da
 check("picked line shows the call", ((await ev("document.getElementById('picked-0').textContent")) || "").startsWith("Your call: Restore the check"));
 check("toast appears", await ev("!document.getElementById('toast').hidden"));
 
+check("question waits behind the call to action", await ev("!document.querySelector('.answer') && !!document.getElementById('open-question')"));
+await ev("document.getElementById('open-question').click()");
+await sleep(100);
 await ev("document.querySelector('.answer[data-key=\"A\"]').click()");
 await sleep(200);
 check("wrong answer says the right one", (await ev("document.getElementById('fb-title').textContent")) === "Not quite: the answer is B.");

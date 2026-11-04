@@ -9,6 +9,8 @@ After Claude Code or Codex works on your project, run `/plumb:brief`. Plumb read
 - **Worth knowing** and **Not checked:** what's true, and what nobody has verified.
 - **One question** about the part that matters most, so you find out whether you actually understand it.
 
+Each finding is shown as a small picture first (said vs. true, a path that goes wrong, the copies a change reached, a count, a timeline, or the lines of code), with a sentence or two under it. The longer evidence stays collapsed.
+
 Plumb only reads your project; it never changes it. The briefing is written by the Claude Code session you run it in, using your normal Claude plan. No extra API key is needed.
 
 ## Try it locally

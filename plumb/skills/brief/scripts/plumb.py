@@ -725,6 +725,115 @@ def load_index(root):
     return idx
 
 
+# Exhibit type → (list field, min, max entries, required text fields per entry).
+EXHIBITS = {
+    "compare": ("rows", 1, 6, ("left", "right")),
+    "flow": ("steps", 2, 7, ("text",)),
+    "places": ("places", 1, 12, ("label",)),
+    "tally": ("rows", 1, 4, ("label",)),
+    "timeline": ("events", 2, 8, ("when", "text")),
+    "code": ("lines", 1, 14, ("text",)),
+}
+STATUSES = ("ok", "bad", "warn", "unknown")
+MARKS = ("add", "del", "bad")
+
+
+def validate_exhibit(ex, where, errors):
+    kind = ex.get("type")
+    if kind not in EXHIBITS:
+        errors.append(f"{where}.type: must be one of {', '.join(EXHIBITS)}")
+        return
+    if ex.get("caption") is not None and not isinstance(ex["caption"], str):
+        errors.append(f"{where}.caption: expected a string")
+    field, lo, hi, texts = EXHIBITS[kind]
+    entries = ex.get(field)
+    if not isinstance(entries, list) or not lo <= len(entries) <= hi:
+        errors.append(f"{where}.{field}: give {lo} to {hi} entries")
+        entries = entries if isinstance(entries, list) else []
+    for k in {"compare": ("left", "right"), "code": ("ref",)}.get(kind, ()):
+        if not isinstance(ex.get(k), str):
+            errors.append(f"{where}.{k}: missing")
+    total = ex.get("total")
+    if kind == "tally" and (not isinstance(total, int) or isinstance(total, bool) or total < 1):
+        errors.append(f"{where}.total: must be a whole number above 0")
+        total = None
+    for j, e in enumerate(entries):
+        w = f"{where}.{field}[{j}]"
+        if not isinstance(e, dict):
+            errors.append(f"{w}: expected an object")
+            continue
+        for k in texts:
+            if not isinstance(e.get(k), str):
+                errors.append(f"{w}.{k}: missing")
+        if e.get("status") is not None and e["status"] not in STATUSES:
+            errors.append(f"{w}.status: must be one of {', '.join(STATUSES)}")
+        if kind == "places" and e.get("status") not in STATUSES:
+            errors.append(f"{w}.status: must be one of {', '.join(STATUSES)}")
+        if kind == "tally":
+            v = e.get("value")
+            if not isinstance(v, int) or isinstance(v, bool) or v < 0 or (total and v > total):
+                errors.append(f"{w}.value: must be a whole number from 0 to total")
+        if kind == "code":
+            if e.get("mark") is not None and e["mark"] not in MARKS:
+                errors.append(f"{w}.mark: must be one of {', '.join(MARKS)}")
+            if e.get("n") is not None and (not isinstance(e["n"], int) or isinstance(e["n"], bool)):
+                errors.append(f"{w}.n: expected a line number")
+        for k in ("ref", "sub"):
+            if e.get(k) is not None and not isinstance(e[k], str):
+                errors.append(f"{w}.{k}: expected a string")
+
+
+CJK = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
+
+
+def word_count(text):
+    """Words in Latin-script text; two CJK characters count as one word."""
+    text = str(text or "")
+    cjk = len(CJK.findall(text))
+    return len(CJK.sub(" ", text).split()) + (cjk + 1) // 2
+
+
+BODY_WORDS, SUMMARY_WORDS, PAGE_WORDS = 40, 60, 450
+
+
+def exhibit_text(ex):
+    parts = [ex.get("caption"), ex.get("left"), ex.get("right")]
+    field = EXHIBITS.get(ex.get("type"), ("",))[0]
+    for e in ex.get(field) or []:
+        if isinstance(e, dict):
+            parts += [e.get(k) for k in ("left", "right", "text", "label", "sub")]
+    return " ".join(p for p in parts if isinstance(p, str))
+
+
+def text_warnings(b):
+    """Advice, not errors: the page renders anyway. Keeps briefings short and visual."""
+    warns = []
+    summ = b.get("summary") or {}
+    n = word_count(summ.get("text"))
+    if n > SUMMARY_WORDS:
+        warns.append(f"summary.text: {n} words. Keep it to {SUMMARY_WORDS} or fewer.")
+    shown = n + sum(word_count(d) for d in summ.get("did") or []) + word_count(summ.get("state"))
+    items = b.get("items") or []
+    pictured = 0
+    for i, it in enumerate(items):
+        n = word_count(it.get("body"))
+        shown += n + word_count(it.get("title")) + word_count(exhibit_text(it.get("exhibit") or {}))
+        if n > BODY_WORDS:
+            warns.append(f"items[{i}].body: {n} words. Keep it to {BODY_WORDS} or fewer; move evidence to "
+                         "`detail` (shown collapsed) or into the exhibit.")
+        if it.get("exhibit"):
+            pictured += 1
+        elif it.get("kind") in ("call", "decided") or it.get("urgent"):
+            warns.append(f"items[{i}]: {'the urgent' if it.get('urgent') else 'a ' + it.get('kind')} item has no exhibit. "
+                         "Show the finding as a picture (see reference.md).")
+    if items and pictured * 2 < len(items):
+        warns.append(f"items: only {pictured} of {len(items)} items have an exhibit. Aim for at least half.")
+    if shown > PAGE_WORDS:
+        warns.append(f"briefing: {shown} words on the page before details and the question. Aim for {PAGE_WORDS} "
+                     "or fewer: cut items, shorten bodies, or show more as exhibits.")
+    return warns
+
+
 def validate(b):
     errors = []
 
@@ -786,6 +895,10 @@ def validate(b):
                 errors.append(f"{w}.options[{j}].prompt: expected a string")
         if it.get("kind") == "call" and not opts:
             errors.append(f"{w}: a 'call' item needs options")
+        need(it, "detail", str, w, optional=True)
+        ex = need(it, "exhibit", dict, w, optional=True)
+        if ex is not None:
+            validate_exhibit(ex, f"{w}.exhibit", errors)
     if urgent > 1:
         errors.append("items: mark at most one item urgent")
     if find_secrets(json.dumps(b, ensure_ascii=False)):
@@ -851,6 +964,12 @@ def cmd_render(args):
         for e in errors:
             print(f"  - {e}", file=sys.stderr)
         return 1
+    warns = text_warnings(b)
+    if warns:
+        print("plumb: the page renders, but it is harder to read than it needs to be. Fix these and run render again:",
+              file=sys.stderr)
+        for w in warns:
+            print(f"  - {w}", file=sys.stderr)
     root = Path(b["project"]["path"]).expanduser()
     if args.out:
         out = Path(args.out).expanduser()

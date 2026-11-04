@@ -59,6 +59,8 @@ The user lets agents write code they don't read line by line. Tell them what the
 
    Mark at most one item `urgent`. Keep 3 to 8 items and cut the rest.
 
+   **Show each item, then say only what the picture can't.** Users found text-only briefings hard to read. For each item, choose its `exhibit` first, from what the finding is (the table in [reference.md](reference.md#exhibits)): `compare` for said-vs-true or asked-vs-did, `flow` for a path that goes wrong, `places` for copies a change should reach, `tally` for counts, `timeline` for timing, `code` for the lines that matter. Every `call`, `decided` and urgent item gets one. Then write a `body` of 1 or 2 sentences (40 words at most) for what the picture doesn't show, usually why it matters. Put longer evidence in `detail`, which the page shows collapsed. Fill exhibits only with what you checked: real line numbers, real counts, real paths.
+
 6. **Write one explain-it-back question.** Ask about the mechanism with the highest stakes that the user is least likely to understand. Usually that's behavior a real user, caller or customer will run into.
    - It must be answerable by understanding the code, not by remembering the briefing. Don't give the answer away in an item.
    - Give 4 choices with exactly one right. Each wrong choice should be a real misconception, with a `note` saying why it's wrong.
@@ -68,7 +70,7 @@ The user lets agents write code they don't read line by line. Tell them what the
 
 7. **Write and render the page.** Write the briefing JSON to a temp file outside the project (the format is in [reference.md](reference.md)), then run:
    `python3 ${CLAUDE_SKILL_DIR}/scripts/plumb.py render <file> --open`
-   If it lists errors, fix the JSON and run it again. If it says the page went to a temporary folder, pass that note on to the user. If it can't save the page at all (a read-only sandbox), give the briefing in chat instead: the items as a short list, then the question with its choices, and the answer only after the user replies.
+   If it lists errors, fix the JSON and run it again. If it lists warnings about length or missing exhibits, fix those too and render again. If it says the page went to a temporary folder, pass that note on to the user. If it can't save the page at all (a read-only sandbox), give the briefing in chat instead: the items as a short list, then the question with its choices, and the answer only after the user replies.
 
 8. **Reply in chat in 3 to 5 lines.** Name the session, give the most urgent item in one sentence, give the page's path, and say the question is on the page. Don't paste the briefing. Offer to explain any item or act on a call, and act only if they ask.
 
@@ -76,5 +78,6 @@ The user lets agents write code they don't read line by line. Tell them what the
 
 - Use plain words, concrete numbers with units, and absolute dates.
 - Titles state the finding: "Nobody has talked to the new provider yet", not "Testing status".
-- Bodies are 2 to 5 sentences: what's true, the evidence, and why it matters.
+- Bodies are 1 or 2 sentences. The title states the finding and the exhibit shows the evidence, so the body only adds why it matters or what's missing from the picture.
+- Exhibit entries are short phrases, not sentences: "PID 4121 still listens on :5173", not "The dev server that the agent said it stopped is in fact still running".
 - Put paths and commands in backticks. Text fields support `code`, **bold**, paragraphs separated by a blank line, and lists made of lines starting with "- ".

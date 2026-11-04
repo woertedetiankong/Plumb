@@ -23,6 +23,17 @@
     arrow: svg('<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>', 16),
     info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>', 16)
   };
+  // One mark per status, so colour is never the only signal.
+  const MARK = {
+    ok: { icon: svg('<path d="M20 6 9 17l-5-5"/>', 14), label: "OK" },
+    bad: { icon: svg('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>', 14), label: "Problem" },
+    warn: { icon: svg('<path d="M12 8v5"/><path d="M12 16.5h.01"/>', 14), label: "Watch" },
+    unknown: { icon: svg('<path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7"/><path d="M12 16.5h.01"/>', 14), label: "Not checked" }
+  };
+  const status = (s) => (MARK[s] ? s : "");
+  function markHTML(s) {
+    return MARK[s] ? `<span class="mark m-${s}" role="img" aria-label="${MARK[s].label}">${MARK[s].icon}</span>` : "";
+  }
 
   function load() {
     try {
@@ -109,16 +120,103 @@
     }
   }
 
+  // --- Exhibits: one picture per finding. Text inside is escaped like everything else. ---
+  // Like inline(), but long paths may wrap after a "/" instead of mid-name.
+  function pathy(s) {
+    return inline(String(s ?? "").replace(/\//g, "/\u2060")).replace(/\/\u2060/g, "/<wbr>");
+  }
+  function refHTML(r) {
+    return r ? `<span class="ref" title="${esc(r)}">${esc(shortPath(r))}</span>` : "";
+  }
+
+  const EXHIBIT = {
+    compare(ex) {
+      const rows = ex.rows.map((r) => `
+        <div class="cmp-row${status(r.status) ? " st-" + r.status : ""}">
+          <div class="cmp-cell cmp-left"><span class="cmp-tag">${inline(ex.left)}</span>${inline(r.left)}</div>
+          <div class="cmp-arrow" aria-hidden="true">${ICON.arrow}</div>
+          <div class="cmp-cell cmp-right"><span class="cmp-tag">${inline(ex.right)}</span><span class="cmp-val">${markHTML(r.status)}<span>${inline(r.right)}</span></span></div>
+        </div>`).join("");
+      return `<div class="cmp"><div class="cmp-head" aria-hidden="true"><span>${inline(ex.left)}</span><span></span><span>${inline(ex.right)}</span></div>${rows}</div>`;
+    },
+    flow(ex) {
+      const steps = ex.steps;
+      return `<ol class="flow${steps.length <= 5 ? " flow-short" : ""}">${steps.map((st, k) => `
+        <li class="flow-step${st.bad ? " bad" : ""}">
+          <span class="flow-num">${k + 1}</span>
+          <span class="flow-text">${inline(st.text)}</span>
+          ${st.bad ? `<span class="flow-flag">${MARK.bad.icon}Goes wrong here</span>` : ""}
+          ${refHTML(st.ref)}
+        </li>`).join("")}</ol>`;
+    },
+    places(ex) {
+      const n = (s) => ex.places.filter((x) => x.status === s).length;
+      const sum = ["ok", "bad", "warn", "unknown"].filter((s) => n(s))
+        .map((s) => `<span class="sum-chip st-${s}">${markHTML(s)}${n(s)} ${{ ok: "ok", bad: n(s) === 1 ? "problem" : "problems", warn: "to watch", unknown: "not checked" }[s]}</span>`).join("");
+      return `<div class="places-sum">${sum}</div><ul class="places">${ex.places.map((x) => `
+        <li class="place st-${status(x.status)}">
+          ${markHTML(x.status)}
+          <span class="place-label">${pathy(x.label)}</span>
+          ${x.sub ? `<span class="place-sub">${inline(x.sub)}</span>` : ""}
+        </li>`).join("")}</ul>`;
+    },
+    tally(ex) {
+      const total = ex.total;
+      return `<div class="tally">${ex.rows.map((r) => {
+        const st = status(r.status) || "ok";
+        let units;
+        if (total <= 60) {
+          units = `<span class="units${total > 30 ? " units-dense" : ""}" aria-hidden="true">${Array.from({ length: total }, (_, k) =>
+            `<span class="unit${k < r.value ? " on" : ""}"></span>`).join("")}</span>`;
+        } else {
+          const pct = Math.round((r.value / total) * 1000) / 10;
+          units = `<span class="bar" aria-hidden="true"><span class="bar-fill" style="width:${pct}%"></span></span>`;
+        }
+        return `
+          <div class="tally-row st-${st}">
+            <div class="tally-head"><span class="tally-num">${esc(r.value)}<span class="tally-of"> of ${esc(total)}</span></span><span class="tally-label">${inline(r.label)}</span></div>
+            ${units}
+          </div>`;
+      }).join("")}</div>`;
+    },
+    timeline(ex) {
+      return `<ol class="tl">${ex.events.map((e) => `
+        <li class="tl-event st-${status(e.status) || "none"}">
+          <span class="tl-when">${esc(e.when)}</span>
+          <span class="tl-dot" aria-hidden="true"></span>
+          <span class="tl-text">${markHTML(e.status)}<span>${inline(e.text)}</span></span>
+        </li>`).join("")}</ol>`;
+    },
+    code(ex) {
+      const sign = { add: "+", del: "−", bad: "!" };
+      return `<figure class="code"><figcaption class="code-ref" title="${esc(ex.ref)}">${esc(shortPath(ex.ref))}</figcaption>
+        <pre><code>${ex.lines.map((l) => `<span class="ln${l.mark ? " " + esc(l.mark) : ""}"><span class="ln-n">${l.n != null ? esc(l.n) : ""}</span><span class="ln-s" aria-hidden="true">${sign[l.mark] || " "}</span>${l.mark ? `<span class="sr">(${{ add: "added", del: "removed", bad: "problem" }[l.mark]}) </span>` : ""}<span class="ln-t">${esc(/^\s*/.exec(l.text)[0])}<span class="ln-code">${esc(l.text.trimStart())}</span></span></span>`).join("")}</code></pre></figure>`;
+    }
+  };
+
+  function exhibitHTML(ex) {
+    if (!ex || !EXHIBIT[ex.type]) return "";
+    return `<div class="exhibit ex-${esc(ex.type)}">${EXHIBIT[ex.type](ex)}${ex.caption ? `<p class="ex-caption">${inline(ex.caption)}</p>` : ""}</div>`;
+  }
+
+  // Refs and the long version sit behind one toggle, so the card shows the finding and the picture.
+  function moreHTML(it) {
+    const refs = it.refs && it.refs.length;
+    if (!refs && !it.detail) return "";
+    const label = it.detail ? "Details and evidence" : "Evidence";
+    return `
+      <details class="more">
+        <summary>${label}${refs ? ` <span class="more-n">${it.refs.length} ref${it.refs.length === 1 ? "" : "s"}</span>` : ""}</summary>
+        ${it.detail ? `<div class="body">${md(it.detail)}</div>` : ""}
+        ${refs ? `<ul class="refs">${it.refs.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
+      </details>`;
+  }
+
   const withOptions = () => B.items.map((it, i) => i).filter((i) => B.items[i].options && B.items[i].options.length);
   const decidedCount = () => withOptions().filter((i) => state.picks[i] != null).length;
 
   function pickedText(o) {
     return ICON.check + "<span>Your call: " + inline(o.label) + (o.prompt ? ". The prompt for your agent is on your clipboard." : ".") + "</span>";
-  }
-
-  function refsHTML(it) {
-    if (!it.refs || !it.refs.length) return "";
-    return `<div><p class="label">Evidence</p><ul class="refs">${it.refs.map((r) => `<li>${esc(r)}</li>`).join("")}</ul></div>`;
   }
 
   function decisionHTML(it, i) {
@@ -136,10 +234,11 @@
       <article class="item decision ${esc(it.kind)}${it.urgent ? " urgent" : ""}" id="item-${i}" aria-labelledby="item-${i}-title">
         <div class="decision-meta">${pill}</div>
         <h3 id="item-${i}-title">${inline(it.title)}</h3>
+        ${exhibitHTML(it.exhibit)}
         <div class="body">${md(it.body)}</div>
-        ${refsHTML(it)}
         ${opts ? `<div class="options" role="group" aria-label="Your call">${opts}</div>
         <p class="picked" id="picked-${i}" aria-live="polite">${chosen ? pickedText(chosen) : ""}</p>` : ""}
+        ${moreHTML(it)}
       </article>`;
   }
 
@@ -148,8 +247,9 @@
       <article class="item ${esc(it.kind)}${it.urgent ? " urgent" : ""}" id="item-${i}">
         ${it.urgent ? '<span class="stakes stakes-high tag">Most urgent</span>' : ""}
         <h3>${inline(it.title)}</h3>
+        ${exhibitHTML(it.exhibit)}
         <div class="body">${md(it.body)}</div>
-        ${refsHTML(it)}
+        ${moreHTML(it)}
       </article>`;
   }
 
@@ -262,9 +362,7 @@
           <h3 class="fb-title" id="fb-title" tabindex="-1">${right ? "Right." : "Not quite: the answer is " + esc(q.answer) + "."}</h3>
           ${!right && mine && mine.note ? `<div class="note-wrong body">${md(mine.note)}</div>` : ""}
           <div class="body">${md(q.explanation)}</div>
-          ${q.path && q.path.length ? `<div><p class="label">What happens, step by step</p><ol class="path">${q.path.map((s) => `
-            <li class="${s.bad ? "bad" : ""}"><span>${inline(s.text)}</span>${s.ref ? `<span class="ref" title="${esc(s.ref)}">${esc(shortPath(s.ref))}</span>` : ""}</li>`).join("")}
-          </ol></div>` : ""}
+          ${q.path && q.path.length ? `<div class="path"><p class="label">What happens, step by step</p>${exhibitHTML({ type: "flow", steps: q.path })}</div>` : ""}
           ${q.why ? `<div class="why body">${md(q.why)}</div>` : ""}
         </div>`;
     }

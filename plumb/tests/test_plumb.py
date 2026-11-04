@@ -246,6 +246,47 @@ class RenderTest(Env):
         b2["question"] = None
         self.assertEqual(plumb.validate(b2), [])
 
+    def test_exhibit_errors(self):
+        b = self.example()
+        b["items"][0]["exhibit"] = {"type": "chart"}
+        b["items"][1]["exhibit"] = {"type": "compare", "rows": [{"left": "a"}]}
+        b["items"][2]["exhibit"] = {"type": "tally", "total": 3, "rows": [{"label": "x", "value": 4}]}
+        b["items"][3]["exhibit"] = {"type": "places", "places": [{"label": "a", "status": "fine"}]}
+        b["items"][4]["exhibit"] = {"type": "flow", "steps": [{"text": "only one"}]}
+        errors = "\n".join(plumb.validate(b))
+        for expected in ("items[0].exhibit.type: must be one of", "items[1].exhibit.left: missing",
+                         "items[1].exhibit.rows[0].right: missing", "items[2].exhibit.rows[0].value",
+                         "items[3].exhibit.places[0].status", "items[4].exhibit.steps: give 2 to 7"):
+            self.assertIn(expected, errors)
+        b = self.example()
+        b["items"][0]["exhibit"]["lines"][0]["mark"] = "changed"
+        self.assertTrue(any("mark: must be one of" in e for e in plumb.validate(b)))
+
+    def test_text_warnings(self):
+        self.assertEqual(plumb.text_warnings(self.example()), [])
+        b = self.example()
+        b["items"][0]["body"] = "word " * 45
+        del b["items"][1]["exhibit"]
+        for it in b["items"][2:]:
+            it["exhibit"] = None
+        warns = "\n".join(plumb.text_warnings(b))
+        self.assertIn("items[0].body: 45 words", warns)
+        self.assertIn("items[1]: a call item has no exhibit", warns)
+        self.assertIn("only 1 of 5 items have an exhibit", warns)
+        self.assertEqual(plumb.word_count("退款超时后重试"), 4)  # 7 CJK characters
+        self.assertEqual(plumb.word_count("run `pytest` 两次"), 3)
+
+    def test_render_prints_warnings_but_writes(self):
+        b = self.example()
+        b["items"][0]["body"] = "word " * 45
+        src = Path(self.tmp.name) / "long.json"
+        src.write_text(json.dumps(b))
+        err, out = StringIO(), StringIO()
+        with redirect_stderr(err), redirect_stdout(out):
+            self.assertEqual(plumb.main(["render", str(src), "--out", str(Path(self.tmp.name) / "out")]), 0)
+        self.assertIn("items[0].body: 45 words", err.getvalue())
+        self.assertIn("Briefing page:", out.getvalue())
+
     def test_render_writes_page_and_index(self):
         b = self.example()
         b["project"]["path"] = str(self.project)

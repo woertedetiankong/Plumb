@@ -64,6 +64,12 @@ check("sections in order", (await ev("[...document.querySelectorAll('.section-he
   "Needs your call|Decided without asking|Worth knowing|Not checked");
 check("urgent item comes first and is tagged", await ev("document.querySelector('.section .item').classList.contains('urgent') && !!document.querySelector('.item .tag')"));
 check("inline code is formatted", await ev("!!document.querySelector('.item .body code')"));
+check("every item shows its exhibit", (await ev("[...document.querySelectorAll('.item')].map(i => (i.querySelector('.exhibit')?.className.match(/ex-(\\w+)/) || [])[1]).join()")) ===
+  "code,compare,timeline,tally,places");
+check("code exhibit marks 2 removed lines", (await ev("document.querySelectorAll('.ex-code .ln.del').length")) === 2);
+check("tally over 60 draws a bar", await ev("document.querySelector('.ex-tally .bar-fill').style.width === '100%'"));
+check("places sums its statuses", (await ev("[...document.querySelectorAll('.sum-chip')].map(c => c.textContent.trim()).join('|')")) === "1 ok|2 not checked");
+check("evidence starts collapsed", await ev("[...document.querySelectorAll('.more')].every(d => !d.open)"));
 
 await ev("document.querySelector('.opt[data-item=\"0\"][data-opt=\"0\"]').click()");
 await sleep(300);
@@ -78,7 +84,7 @@ await ev("document.querySelector('.answer[data-key=\"A\"]').click()");
 await sleep(200);
 check("wrong answer says the right one", (await ev("document.getElementById('fb-title').textContent")) === "Not quite: the answer is B.");
 check("wrong choice's note is shown", ((await ev("document.querySelector('.feedback').textContent")) || "").includes("Nothing ignores it any more"));
-check("path has 5 steps, 2 marked bad", (await ev("[document.querySelectorAll('.path li').length, document.querySelectorAll('.path li.bad').length].join()")) === "5,2");
+check("path has 5 steps, 2 marked bad", (await ev("[document.querySelectorAll('.path .flow-step').length, document.querySelectorAll('.path .flow-step.bad').length].join()")) === "5,2");
 check("answers lock after answering", await ev("[...document.querySelectorAll('.answer')].every(b => b.disabled)"));
 check("focus moves to the feedback", (await ev("document.activeElement.id")) === "fb-title");
 
@@ -97,6 +103,8 @@ await send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, devi
 await go(page(example.id));
 const w = await ev("[innerWidth, document.documentElement.scrollWidth]");
 check("fits a 390px phone", w[1] <= w[0], `viewport ${w[0]}, content ${w[1]}`);
+const wide = await ev("[...document.querySelectorAll('.item, .exhibit')].filter(e => e.getBoundingClientRect().right > innerWidth + 1).length");
+check("no card or exhibit runs off the phone screen", wide === 0, `${wide} too wide`);
 const shot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true });
 if (process.env.PLUMB_SHOTS) writeFileSync(join(process.env.PLUMB_SHOTS, "phone.png"), Buffer.from(shot.result.data, "base64"));
 

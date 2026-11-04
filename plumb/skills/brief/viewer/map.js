@@ -208,15 +208,17 @@
     const height = Math.round(Math.min(560, Math.max(340, width * 0.56)));
     el.style.height = height + "px";
     const total = areas.reduce((s, a) => s + a.lines, 0) || areas.length;
-    const floor = total * 0.03; // small areas stay big enough to see and click
-    const items = areas.map((a) => ({ a, v: Math.max(a.lines || 0, floor) || 1 })).sort((x, y) => y.v - x.v);
+    // Small areas are drawn at a minimum size so they stay readable and clickable; the caption says so.
+    // Unmapped files get a smaller minimum: they matter only when there are many.
+    const floor = (a) => total * (a.id === "_unmapped" ? 0.015 : 0.06);
+    const items = areas.map((a) => ({ a, v: Math.max(a.lines || 0, floor(a)) || 1 })).sort((x, y) => y.v - x.v);
     const sum = items.reduce((s, r) => s + r.v, 0);
     items.forEach((r) => { r.v = (r.v / sum) * width * height; });
     const gap = 3;
     el.innerHTML = squarify(items, 0, 0, width, height).map((r) => {
       const w = Math.max(r.w - gap * 2, 4), h = Math.max(r.h - gap * 2, 4);
       const style = `left:${(r.x + gap).toFixed(1)}px;top:${(r.y + gap).toFixed(1)}px;width:${w.toFixed(1)}px;height:${h.toFixed(1)}px`;
-      return tileHTML(r.a, style, w < 100 || h < 58).replace('class="tile ', `class="tile${h < 86 ? " short" : ""} `);
+      return tileHTML(r.a, style, w < 100 || h < 58).replace('class="tile ', `class="tile${h < 86 || w < 150 ? " short" : ""} `);
     }).join("");
   }
 
@@ -300,7 +302,8 @@
     const last = a.last && a.level ? day(a.last) + " · " + DEPTHS[a.level - 1].toLowerCase() + (a.source === "you said" ? " (you said)" : "") : "Never";
     const check = a.check ? (a.check.right ? "Right" : "Wrong") + " · " + day(a.check.at) : "None yet";
     const facts = [
-      [`Changed since ${a.changed && a.changed.counted_from === "last checked" ? "it was last checked" : "the last " + (a.changed ? a.changed.counted_from.replace("last ", "") : "30 days")}`, changedText(a.changed)],
+      [a.changed && a.changed.counted_from === "last checked" ? "Changed since it was last checked"
+        : `Changed in the ${a.changed ? a.changed.counted_from : "last 30 days"}`, changedText(a.changed)],
       ["Last understood", last],
       ["Last question", check],
       ["Size", `${num(a.lines)} lines in ${plural(a.files, "file")}`],
@@ -334,7 +337,7 @@
         <section class="card map-main" aria-labelledby="map-title">
           <div class="card-head">
             <h2 id="map-title">Understanding map</h2>
-            <p class="muted small">${plural(mapped.length, "area")} · sized by lines of code · select one for details</p>
+            <p class="muted small">${plural(mapped.length, "area")} · sized by lines of code, small ones enlarged · select one for details</p>
           </div>
           <div id="treemap" class="treemap"></div>
           <div class="legend">

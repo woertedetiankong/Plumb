@@ -1,7 +1,7 @@
 {
   "name": "plumb",
   "displayName": "Plumb",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Briefings on what your coding agents did, checked against your project as it is now, and a map of which parts you understand as deeply as their stakes need.",
   "author": { "name": "woerte", "url": "https://github.com/woertedetiankong" },
   "homepage": "https://github.com/woertedetiankong/Plumb",

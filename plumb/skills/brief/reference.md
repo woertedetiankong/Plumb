@@ -30,26 +30,41 @@
 
 ## Exhibits
 
-Every exhibit has a `type` and an optional `caption` (one sentence: what to notice). Pick the type from what the finding is:
+Every exhibit has a `type` and a `caption`. The caption is shown above the picture and says what to notice, in one short sentence of 16 words or fewer: "13 days since a person last called", not "Timeline of calls". Pick the type from what the finding is:
 
 | The finding is… | `type` | Fields |
 |---|---|---|
 | A claim, request or plan next to what's true now ("said X, actually Y"; "asked for X, got Y") | `compare` | `left` and `right`: the column names, such as "Agent said" and "Project now". `rows`: 1 to 6 of `{ "left", "right", "status" }`. |
 | A sequence where something goes wrong: a request path, a race, a failure mode | `flow` | `steps`: 2 to 7 of `{ "text", "ref", "bad" }`. Mark the step where it goes wrong `"bad": true`. Five steps or fewer draw left to right. |
-| A change that should reach several places: copies, configs, environments, clients | `places` | `places`: 1 to 12 of `{ "label", "sub", "status" }`. `status` is required here. |
-| A count: tests, cases, clips, rows, before and after | `tally` | `total`: a whole number. `rows`: 1 to 4 of `{ "label", "value", "status" }`, each `value` from 0 to `total`. Totals up to 60 draw one square per unit; larger ones draw a bar. |
-| Order or timing: what happened when, how long something has been left, a retry schedule | `timeline` | `events`: 2 to 8 of `{ "when", "text", "status" }`. `when` is short: `Oct 21`, `14:02`, `5 s`. |
+| Where something is, or should be: copies, configs, environments, what's in git and what isn't | `places` | `places`: 1 to 12 of `{ "label", "sub", "status" }`. `status` is required here. Places are drawn in groups by status, worst first; `groups` names them for this finding, such as `{ "bad": "Key in plain text", "ok": "Clean" }`. |
+| A count out of a total: tests, cases, clips, before and after | `tally` | `total`: a whole number. `rows`: 1 to 4 of `{ "label", "value", "status" }`, each `value` from 0 to `total`. Totals up to 20 draw one square per unit; larger ones a thin bar. |
+| Amounts to compare on one scale: durations, sizes, memory, cost, rows | `bars` | `unit`: optional, such as `s` or `GB`. `rows`: 1 to 6 of `{ "label", "value", "display", "status" }`. `value` is a number; `display` replaces the printed value ("22 s or more"). Bars without a `bad` or `warn` status are grey, so the problem is the one in colour. |
+| Order or timing: what happened when, how long something has been left, a retry schedule | `timeline` | `events`: 2 to 8 of `{ "when", "text", "status" }`, oldest first. `when` is short: `Oct 21`, `2026-10-21`, `14:02` or `5 s`. When every `when` is in one of these forms, the timeline is drawn to scale and long gaps are labelled ("8 days"). |
 | A few lines of real code, or what was removed or added | `code` | `ref`: `file:line`. `lines`: 1 to 14 of `{ "n", "text", "mark" }`. `n` is the line number (leave it out for removed lines). `mark` is `add`, `del` or `bad`. |
 
-`status` is `ok`, `bad`, `warn` or `unknown`, optional except in `places`. Each one is drawn with its own icon as well as a colour. Text in exhibits supports `` `code` `` and `**bold**`; keep each entry to a short phrase.
+`status` is `ok`, `bad`, `warn` or `unknown`, optional except in `places`. Each one is drawn with its own icon. Only `bad` and `warn` get colour; the rest stay grey or ink, so give `bad` only to what is actually wrong. Text in exhibits supports `` `code` `` and `**bold**`. Every entry is a short phrase of 10 words or fewer; numbers and names, not sentences. In a `flow`, `ref` is shown as the file name and line only.
 
 ```json
 "exhibit": {
   "type": "compare",
+  "caption": "Two of the agent's claims don't hold today.",
   "left": "Agent said", "right": "Project now",
   "rows": [
     { "left": "All 80 clips passed the listen-back check", "right": "The check only compares word counts", "status": "bad" },
     { "left": "The dev server is stopped", "right": "PID 4121 still listens on :5173", "status": "bad" }
+  ]
+}
+```
+
+A `bars` example, for a wait the user would sit through:
+
+```json
+"exhibit": {
+  "type": "bars", "unit": "s",
+  "caption": "Nothing times out, so a stall is silence the learner sits through.",
+  "rows": [
+    { "label": "Usual wait for a reply", "value": 2.45 },
+    { "label": "Worst stall seen", "value": 22, "display": "22 s or more", "status": "bad" }
   ]
 }
 ```
@@ -69,7 +84,7 @@ Every exhibit has a `type` and an optional `caption` (one sentence: what to noti
 
 ## Length
 
-`render` warns, but still writes the page, when a `body` is over 40 words, `summary.text` is over 60 words, a `call`, `decided` or urgent item has no exhibit, fewer than half the items have one, or the page shows more than 450 words before the collapsed details and the question. Two CJK characters count as one word. Fix the warnings and render again.
+`render` warns, but still writes the page, when an exhibit has no caption or an entry over 10 words, when a `body` is over 40 words, `summary.text` is over 60 words, a `call`, `decided` or urgent item has no exhibit, fewer than half the items have one, or the page shows more than 450 words before the collapsed details and the question. Two CJK characters count as one word. Fix the warnings and render again.
 
 ## Text formatting
 

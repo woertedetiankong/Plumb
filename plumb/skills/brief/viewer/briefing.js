@@ -4,13 +4,16 @@
 
   const B = JSON.parse(document.getElementById("briefing-data").textContent);
   const KEY = "plumb:briefing:" + B.id;
+  // The urgent item, whatever its kind, is read first.
   const SECTIONS = [
-    { kind: "call", title: "Needs your call", sub: "Most urgent first. Picking an option copies a ready-to-paste prompt for your agent." },
+    { kind: "urgent", title: "Read this first", sub: "" },
+    { kind: "call", title: "Needs your call", sub: "Picking an option copies a ready-to-paste prompt for your agent." },
     { kind: "decided", title: "Decided without asking", sub: "Choices the agent made on its own." },
     { kind: "fyi", title: "Worth knowing", sub: "" },
     { kind: "unchecked", title: "Not checked", sub: "Nobody has verified these yet." },
     { kind: "outside", title: "Outside this session", sub: "Found while checking, but this session didn't cause it." }
   ];
+  const KIND_LABEL = { call: "Needs your call", decided: "Made without asking", fyi: "Worth knowing", unchecked: "Not checked", outside: "Outside this session" };
   const AGENT = { "claude-code": "Claude Code", codex: "Codex" };
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const $ = (id) => document.getElementById(id);
@@ -149,78 +152,145 @@
   function pathy(s) {
     return inline(String(s ?? "").replace(/\//g, "/\u2060")).replace(/\/\u2060/g, "/<wbr>");
   }
+  // In a diagram a file reference only needs the file name and line; the full path is in the tooltip.
   function refHTML(r) {
-    return r ? `<span class="ref" title="${esc(r)}">${esc(shortPath(r))}</span>` : "";
+    return r ? `<span class="ref" title="${esc(r)}">${esc(String(r).split("/").pop())}</span>` : "";
+  }
+  const STATUS_LABEL = { bad: "Problem", warn: "Watch", unknown: "Not checked", ok: "Fine" };
+  const STATUS_ORDER = ["bad", "warn", "unknown", "ok"];
+
+  // Timeline positions: "Oct 21", "2026-10-21", "14:02" or "5 s". Months without a year are taken in order,
+  // so "Dec 30" then "Jan 2" crosses into the next year.
+  const MON = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+  const UNIT_S = { ms: 0.001, s: 1, sec: 1, min: 60, h: 3600, d: 86400, days: 86400 };
+  function timePoints(events) {
+    let year = 2000, lastMonth = -1, kind = null;
+    const out = [];
+    for (const e of events) {
+      const s = String(e.when || "").trim();
+      let m, p = null;
+      if ((m = /^(\d{4})-(\d\d)-(\d\d)/.exec(s))) p = { k: "day", v: Date.UTC(+m[1], m[2] - 1, +m[3]) / 864e5 };
+      else if ((m = /^([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2})$/.exec(s)) && MON[m[1].toLowerCase()] != null) {
+        const mo = MON[m[1].toLowerCase()];
+        if (mo < lastMonth) year++;
+        lastMonth = mo;
+        p = { k: "day", v: Date.UTC(year, mo, +m[2]) / 864e5 };
+      } else if ((m = /^(\d{1,2}):(\d\d)$/.exec(s))) p = { k: "clock", v: +m[1] * 60 + +m[2] };
+      else if ((m = /^(\d+(?:\.\d+)?)\s*(ms|s|sec|min|h|d|days)$/.exec(s))) p = { k: "dur", v: +m[1] * UNIT_S[m[2]] };
+      if (!p || (kind && p.k !== kind)) return null;
+      kind = p.k;
+      out.push(p.v);
+    }
+    for (let i = 1; i < out.length; i++) if (out[i] < out[i - 1]) return null;
+    return { kind, values: out };
+  }
+  function gapText(kind, d) {
+    if (kind === "day") return d === 1 ? "1 day" : d + " days";
+    const sec = kind === "clock" ? d * 60 : d;
+    if (sec < 60) return Math.round(sec * 10) / 10 + " s";
+    if (sec < 3600) return Math.round(sec / 60) + " min";
+    if (sec < 86400) return Math.round(sec / 360) / 10 + " h";
+    return Math.round(sec / 86400) + " days";
+  }
+  function num(v) {
+    return Math.abs(v) >= 100 || Number.isInteger(v) ? String(Math.round(v)) : String(Math.round(v * 100) / 100);
   }
 
   const EXHIBIT = {
     compare(ex) {
       const rows = ex.rows.map((r) => `
-        <div class="cmp-row${status(r.status) ? " st-" + r.status : ""}">
-          <div class="cmp-cell cmp-left"><span class="cmp-tag">${inline(ex.left)}</span>${inline(r.left)}</div>
-          <div class="cmp-arrow" aria-hidden="true">${ICON.arrow}</div>
+        <div class="cmp-row st-${status(r.status) || "none"}">
+          <div class="cmp-cell cmp-left"><span class="cmp-tag">${inline(ex.left)}</span><span>${inline(r.left)}</span></div>
           <div class="cmp-cell cmp-right"><span class="cmp-tag">${inline(ex.right)}</span><span class="cmp-val">${markHTML(r.status)}<span>${inline(r.right)}</span></span></div>
         </div>`).join("");
-      return `<div class="cmp"><div class="cmp-head" aria-hidden="true"><span>${inline(ex.left)}</span><span></span><span>${inline(ex.right)}</span></div>${rows}</div>`;
+      return `<div class="cmp"><div class="cmp-head" aria-hidden="true"><span>${inline(ex.left)}</span><span>${inline(ex.right)}</span></div>${rows}</div>`;
     },
+    // A chain of numbered stops. A broken stop is the only thing drawn in colour.
     flow(ex) {
       const steps = ex.steps;
-      return `<ol class="flow${steps.length <= 5 ? " flow-short" : ""}">${steps.map((st, k) => `
+      return `<ol class="flow${steps.length <= 5 ? " flow-short" : ""}" style="--n:${steps.length}">${steps.map((st, k) => `
         <li class="flow-step${st.bad ? " bad" : ""}">
-          <span class="flow-num">${k + 1}</span>
-          <span class="flow-text">${inline(st.text)}</span>
-          ${st.bad ? `<span class="flow-flag">${MARK.bad.icon}Goes wrong here</span>` : ""}
-          ${refHTML(st.ref)}
+          <span class="flow-node" aria-hidden="true">${st.bad ? MARK.bad.icon : k + 1}</span>
+          <span class="flow-body">
+            <span class="flow-text">${st.bad ? '<span class="sr">Goes wrong here: </span>' : ""}${inline(st.text)}</span>
+            ${refHTML(st.ref)}
+          </span>
         </li>`).join("")}</ol>`;
     },
+    // Grouped by status, so the line between "fine" and "not fine" is the picture.
     places(ex) {
-      const n = (s) => ex.places.filter((x) => x.status === s).length;
-      const sum = ["ok", "bad", "warn", "unknown"].filter((s) => n(s))
-        .map((s) => `<span class="sum-chip st-${s}">${markHTML(s)}${n(s)} ${{ ok: "ok", bad: n(s) === 1 ? "problem" : "problems", warn: "to watch", unknown: "not checked" }[s]}</span>`).join("");
-      return `<div class="places-sum">${sum}</div><ul class="places">${ex.places.map((x) => `
-        <li class="place st-${status(x.status)}">
-          ${markHTML(x.status)}
-          <span class="place-label">${pathy(x.label)}</span>
-          ${x.sub ? `<span class="place-sub">${inline(x.sub)}</span>` : ""}
-        </li>`).join("")}</ul>`;
+      const groups = STATUS_ORDER.map((s) => ({ s, list: ex.places.filter((x) => x.status === s) })).filter((g) => g.list.length);
+      const names = ex.groups || {};
+      return `<div class="places${groups.length === 1 ? " places-one" : ""}">${groups.map((g) => `
+        <section class="pl-group st-${g.s}">
+          <h4 class="pl-head">${markHTML(g.s)}<span>${inline(names[g.s] || STATUS_LABEL[g.s])}</span><span class="pl-count">${g.list.length}</span></h4>
+          <ul class="pl-list">${g.list.map((x) => `
+            <li class="place">
+              <span class="place-label">${pathy(x.label)}</span>
+              ${x.sub ? `<span class="place-sub">${inline(x.sub)}</span>` : ""}
+            </li>`).join("")}</ul>
+        </section>`).join("")}</div>`;
     },
+    // Small totals draw one square per unit; larger ones a thin bar. The number stays in ink.
     tally(ex) {
       const total = ex.total;
       return `<div class="tally">${ex.rows.map((r) => {
-        const st = status(r.status) || "ok";
-        let units;
-        if (total <= 60) {
-          units = `<span class="units${total > 30 ? " units-dense" : ""}" aria-hidden="true">${Array.from({ length: total }, (_, k) =>
-            `<span class="unit${k < r.value ? " on" : ""}"></span>`).join("")}</span>`;
-        } else {
-          const pct = Math.round((r.value / total) * 1000) / 10;
-          units = `<span class="bar" aria-hidden="true"><span class="bar-fill" style="width:${pct}%"></span></span>`;
-        }
+        const st = status(r.status) || "none";
+        const units = total <= 20
+          ? `<span class="units" aria-hidden="true">${Array.from({ length: total }, (_, k) => `<span class="unit${k < r.value ? " on" : ""}"></span>`).join("")}</span>`
+          : `<span class="meter" aria-hidden="true"><span class="meter-fill" style="width:${Math.round((r.value / total) * 1000) / 10}%"></span></span>`;
         return `
           <div class="tally-row st-${st}">
-            <div class="tally-head"><span class="tally-num">${esc(r.value)}<span class="tally-of"> of ${esc(total)}</span></span><span class="tally-label">${inline(r.label)}</span></div>
+            <div class="tally-head"><span class="tally-num">${esc(r.value)}<span class="tally-of"> of ${esc(total)}</span></span>${markHTML(r.status)}<span class="tally-label">${inline(r.label)}</span></div>
             ${units}
           </div>`;
       }).join("")}</div>`;
     },
+    // Amounts on one scale: durations, sizes, memory. Problems in colour, the rest grey.
+    bars(ex) {
+      const max = Math.max(...ex.rows.map((r) => Number(r.value) || 0)) || 1;
+      const unit = ex.unit ? " " + ex.unit : "";
+      return `<div class="bars">${ex.rows.map((r) => {
+        const st = status(r.status) || "none";
+        const w = Math.max(0.6, (Number(r.value) / max) * 100);
+        return `
+          <div class="bars-row st-${st}">
+            <span class="bars-label">${inline(r.label)}</span>
+            <span class="bars-track"><span class="bars-fill" style="--w:${Math.round(w * 10) / 10}"></span><span class="bars-val">${r.status === "bad" || r.status === "warn" ? markHTML(r.status) : ""}${inline(r.display || num(Number(r.value)) + unit)}</span></span>
+          </div>`;
+      }).join("")}</div>`;
+    },
+    // Drawn to scale when the times can be read: the long wait is the picture.
     timeline(ex) {
-      return `<ol class="tl">${ex.events.map((e) => `
-        <li class="tl-event st-${status(e.status) || "none"}">
-          <span class="tl-when">${esc(e.when)}</span>
-          <span class="tl-dot" aria-hidden="true"></span>
-          <span class="tl-text">${markHTML(e.status)}<span>${inline(e.text)}</span></span>
-        </li>`).join("")}</ol>`;
+      const pts = timePoints(ex.events);
+      const span = pts ? pts.values[pts.values.length - 1] - pts.values[0] : 0;
+      const parts = [];
+      ex.events.forEach((e, k) => {
+        if (k && pts && span > 0) {
+          const d = pts.values[k] - pts.values[k - 1], frac = d / span;
+          const h = Math.round(6 + 110 * frac);
+          parts.push(`<li class="tl-gap" style="height:${h}px" aria-hidden="true">${h >= 34 && d > 0 ? `<span>${esc(gapText(pts.kind, d))}</span>` : ""}</li>`);
+        } else if (k) parts.push('<li class="tl-gap" style="height:10px" aria-hidden="true"></li>');
+        parts.push(`
+          <li class="tl-event st-${status(e.status) || "none"}">
+            <span class="tl-when">${esc(e.when)}</span>
+            <span class="tl-dot">${markHTML(e.status) || '<span class="tl-plain" aria-hidden="true"></span>'}</span>
+            <span class="tl-text">${inline(e.text)}</span>
+          </li>`);
+      });
+      return `<ol class="tl${pts && span > 0 ? " tl-scaled" : ""}">${parts.join("")}</ol>`;
     },
     code(ex) {
       const sign = { add: "+", del: "−", bad: "!" };
-      return `<figure class="code"><figcaption class="code-ref" title="${esc(ex.ref)}">${esc(shortPath(ex.ref))}</figcaption>
-        <pre><code>${ex.lines.map((l) => `<span class="ln${l.mark ? " " + esc(l.mark) : ""}"><span class="ln-n">${l.n != null ? esc(l.n) : ""}</span><span class="ln-s" aria-hidden="true">${sign[l.mark] || " "}</span>${l.mark ? `<span class="sr">(${{ add: "added", del: "removed", bad: "problem" }[l.mark]}) </span>` : ""}<span class="ln-t">${esc(/^\s*/.exec(l.text)[0])}<span class="ln-code">${esc(l.text.trimStart())}</span></span></span>`).join("")}</code></pre></figure>`;
+      return `<div class="code"><div class="code-ref" title="${esc(ex.ref)}">${esc(shortPath(ex.ref))}</div>
+        <pre><code>${ex.lines.map((l) => `<span class="ln${l.mark ? " " + esc(l.mark) : ""}"><span class="ln-n">${l.n != null ? esc(l.n) : ""}</span><span class="ln-s" aria-hidden="true">${sign[l.mark] || " "}</span>${l.mark ? `<span class="sr">(${{ add: "added", del: "removed", bad: "problem" }[l.mark]}) </span>` : ""}<span class="ln-t">${esc(/^\s*/.exec(l.text)[0])}<span class="ln-code">${esc(l.text.trimStart())}</span></span></span>`).join("")}</code></pre></div>`;
     }
   };
 
   function exhibitHTML(ex) {
     if (!ex || !EXHIBIT[ex.type]) return "";
-    return `<div class="exhibit ex-${esc(ex.type)}">${EXHIBIT[ex.type](ex)}${ex.caption ? `<p class="ex-caption">${inline(ex.caption)}</p>` : ""}</div>`;
+    // The caption says what to notice, so it comes before the picture.
+    return `<figure class="exhibit ex-${esc(ex.type)}">${ex.caption ? `<figcaption class="ex-caption">${inline(ex.caption)}</figcaption>` : ""}${EXHIBIT[ex.type](ex)}</figure>`;
   }
 
   // Refs and the long version sit behind one toggle, so the card shows the finding and the picture.
@@ -250,10 +320,9 @@
         <span>${inline(o.label)}</span>${o.recommended ? '<span class="rec">Recommended</span>' : ""}
       </button>`).join("");
     const chosen = pick != null && it.options && it.options[pick];
-    let pill;
-    if (it.urgent) pill = '<span class="stakes stakes-high tag">Most urgent</span>';
-    else if (it.kind === "call") pill = '<span class="stakes stakes-mid">Needs your call</span>';
-    else pill = '<span class="stakes stakes-low">Made without asking</span>';
+    const kindPill = it.kind === "call" ? '<span class="stakes stakes-mid">Needs your call</span>'
+      : `<span class="stakes stakes-low">${KIND_LABEL[it.kind] || ""}</span>`;
+    const pill = (it.urgent ? '<span class="stakes stakes-high">Most urgent</span>' : "") + kindPill;
     return `
       <article class="item decision ${esc(it.kind)}${it.urgent ? " urgent" : ""}" id="item-${i}" aria-labelledby="item-${i}-title">
         <div class="decision-meta">${pill}</div>
@@ -268,8 +337,7 @@
 
   function groupItemHTML(it, i) {
     return `
-      <article class="item ${esc(it.kind)}${it.urgent ? " urgent" : ""}" id="item-${i}">
-        ${it.urgent ? '<span class="stakes stakes-high tag">Most urgent</span>' : ""}
+      <article class="item ${esc(it.kind)}" id="item-${i}">
         <h3>${inline(it.title)}</h3>
         ${exhibitHTML(it.exhibit)}
         <div class="body">${md(it.body)}</div>
@@ -279,17 +347,16 @@
 
   function sectionHTML(sec) {
     const list = B.items.map((it, i) => ({ it, i }))
-      .filter((x) => x.it.kind === sec.kind)
-      .sort((a, b) => (b.it.urgent ? 1 : 0) - (a.it.urgent ? 1 : 0));
+      .filter((x) => (sec.kind === "urgent" ? x.it.urgent : x.it.kind === sec.kind && !x.it.urgent));
     if (!list.length) return "";
-    const asCards = sec.kind === "call" || sec.kind === "decided";
+    const asCards = sec.kind === "urgent" || sec.kind === "call" || sec.kind === "decided";
     const inner = asCards
       ? list.map((x) => decisionHTML(x.it, x.i)).join("")
       : `<div class="card group${sec.kind === "unchecked" ? " group-quiet" : ""}">${list.map((x) => groupItemHTML(x.it, x.i)).join("")}</div>`;
     return `
       <section class="section" id="sec-${sec.kind}" aria-labelledby="sec-${sec.kind}-title">
         <div class="section-head">
-          <h2 id="sec-${sec.kind}-title">${sec.title}</h2><span class="count">${list.length}</span>
+          <h2 id="sec-${sec.kind}-title">${sec.title}</h2>${sec.kind === "urgent" ? "" : `<span class="count">${list.length}</span>`}
           ${sec.sub ? `<p class="section-sub">${sec.sub}</p>` : ""}
         </div>
         ${inner}
@@ -301,7 +368,8 @@
     const total = withOptions().length;
     const steps = [`<li><a href="#what" data-step="what"><span class="step-num">1</span><span class="step-label">What happened</span></a></li>`];
     if (total) {
-      const first = B.items.some((it) => it.kind === "call") ? "call" : "decided";
+      const has = (k) => B.items.some((it) => it.options && it.options.length && (k === "urgent" ? it.urgent : it.kind === k && !it.urgent));
+      const first = ["urgent", "call", "decided"].find(has) || "call";
       steps.push(`<li><a href="#sec-${first}" data-step="sec-${first}"><span class="step-num">${steps.length + 1}</span><span class="step-label">Your calls</span><span class="count" id="decided-count">${decidedCount()} of ${total}</span></a></li>`);
     }
     if (B.question) {

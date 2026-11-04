@@ -109,7 +109,8 @@
             "right": "New orders wait until every row is checked",
             "status": "bad"
           }
-        ]
+        ],
+        "caption": "It was only ever run on an empty database."
       }
     },
     {
@@ -171,7 +172,8 @@
             "value": 212,
             "status": "ok"
           }
-        ]
+        ],
+        "caption": "The whole suite passes on the branch today."
       }
     },
     {
@@ -196,7 +198,12 @@
             "sub": "not deployed",
             "status": "unknown"
           }
-        ]
+        ],
+        "caption": "Only the fake provider has seen a refund.",
+        "groups": {
+          "ok": "Tested",
+          "unknown": "Never tried"
+        }
       }
     }
   ],

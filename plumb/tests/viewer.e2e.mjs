@@ -61,14 +61,16 @@ await send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 900, dev
 await go(page(example.id));
 check("renders all 5 items", (await ev("document.querySelectorAll('.item').length")) === 5);
 check("sections in order", (await ev("[...document.querySelectorAll('.section-head h2')].map(h => h.textContent).join('|')")) ===
-  "Needs your call|Decided without asking|Worth knowing|Not checked");
-check("urgent item comes first and is tagged", await ev("document.querySelector('.section .item').classList.contains('urgent') && !!document.querySelector('.item .tag')"));
+  "Read this first|Needs your call|Decided without asking|Worth knowing|Not checked");
+check("urgent item comes first and is tagged", await ev("document.querySelector('.section .item').classList.contains('urgent') && !!document.querySelector('.item.urgent .stakes-high')"));
 check("inline code is formatted", await ev("!!document.querySelector('.item .body code')"));
 check("every item shows its exhibit", (await ev("[...document.querySelectorAll('.item')].map(i => (i.querySelector('.exhibit')?.className.match(/ex-(\\w+)/) || [])[1]).join()")) ===
   "code,compare,timeline,tally,places");
 check("code exhibit marks 2 removed lines", (await ev("document.querySelectorAll('.ex-code .ln.del').length")) === 2);
-check("tally over 60 draws a bar", await ev("document.querySelector('.ex-tally .bar-fill').style.width === '100%'"));
-check("places sums its statuses", (await ev("[...document.querySelectorAll('.sum-chip')].map(c => c.textContent.trim()).join('|')")) === "1 ok|2 not checked");
+check("tally over 20 draws a thin bar", await ev("document.querySelector('.ex-tally .meter-fill').style.width === '100%'"));
+check("places are grouped, named, worst first", (await ev("[...document.querySelectorAll('.pl-head')].map(h => [...h.querySelectorAll('span:not(.mark)')].map(s => s.textContent).join(' ')).join('|')")) === "Never tried 2|Tested 1");
+check("each caption comes before its picture", await ev("[...document.querySelectorAll('.exhibit')].every(f => !f.querySelector('.ex-caption') || f.firstElementChild.classList.contains('ex-caption'))"));
+check("timeline is drawn to scale with its gaps labelled", (await ev("!!document.querySelector('.tl.tl-scaled') && [...document.querySelectorAll('.tl-gap span')].map(s => s.textContent).join('|')")) === "5 s|5 s");
 check("evidence starts collapsed", await ev("[...document.querySelectorAll('.more')].every(d => !d.open)"));
 
 await ev("document.querySelector('.opt[data-item=\"0\"][data-opt=\"0\"]').click()");

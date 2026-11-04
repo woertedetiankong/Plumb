@@ -9,9 +9,9 @@ After Claude Code or Codex works on your project, run `/plumb:brief`. Plumb read
 - **Worth knowing** and **Not checked:** what's true, and what nobody has verified.
 - **One question** about the part that matters most, so you find out whether you actually understand it.
 
-Each finding is shown as a small picture first (said vs. true, a path that goes wrong, the copies a change reached, a count, a timeline, or the lines of code), with a sentence or two under it. The longer evidence stays collapsed.
+Each finding is shown as a small picture first, headed by what to notice: said vs. true, a path that goes wrong, where something is (grouped, so what's fine sits apart from what isn't), a count, amounts drawn to scale, a timeline drawn to scale, or the lines of code. Only the problem is drawn in colour. A sentence or two goes under it, and the longer evidence stays collapsed.
 
-Run `/plumb:map` to see your **understanding map**: every area of the project, sized by lines of code and colored by whether you understand it as deeply as its stakes need. The first time, the agent proposes the areas and how deeply each needs understanding (contract, shape or every line), and you confirm them. After that, each right answer to a briefing question moves its area forward, and agent changes since you were last checked move it back a level. Areas nobody has checked yet show as Unchecked, not as gaps; you can also say how well you know an area on the map.
+Run `/plumb:map` to see your **understanding map**: every area of the project, sized by lines of code (data, media, lockfiles, generated files and anything `.gitattributes` marks as generated or vendored count as 0) and colored by whether you understand it as deeply as its stakes need. The first time, the agent proposes the areas and how deeply each needs understanding (contract, shape or every line), and you confirm them. After that, each right answer to a briefing question moves its area forward, and agent changes since you were last checked move it back a level. Areas nobody has checked yet show as Unchecked, not as gaps; you can also say how well you know an area on the map.
 
 Plumb only reads your project; it never changes it. The briefing is written by the Claude Code session you run it in, using your normal Claude plan. No extra API key is needed.
 

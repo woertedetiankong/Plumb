@@ -739,6 +739,7 @@ EXHIBITS = {
     "flow": ("steps", 2, 7, ("text",)),
     "places": ("places", 1, 12, ("label",)),
     "tally": ("rows", 1, 4, ("label",)),
+    "bars": ("rows", 1, 6, ("label",)),
     "timeline": ("events", 2, 8, ("when", "text")),
     "code": ("lines", 1, 14, ("text",)),
 }
@@ -761,6 +762,12 @@ def validate_exhibit(ex, where, errors):
     for k in {"compare": ("left", "right"), "code": ("ref",)}.get(kind, ()):
         if not isinstance(ex.get(k), str):
             errors.append(f"{where}.{k}: missing")
+    if kind == "bars" and ex.get("unit") is not None and not isinstance(ex["unit"], str):
+        errors.append(f"{where}.unit: expected a string")
+    if kind == "places" and ex.get("groups") is not None:
+        g = ex["groups"]
+        if not isinstance(g, dict) or any(k not in STATUSES or not isinstance(v, str) for k, v in g.items()):
+            errors.append(f"{where}.groups: map a status ({', '.join(STATUSES)}) to a group name")
     total = ex.get("total")
     if kind == "tally" and (not isinstance(total, int) or isinstance(total, bool) or total < 1):
         errors.append(f"{where}.total: must be a whole number above 0")
@@ -781,6 +788,12 @@ def validate_exhibit(ex, where, errors):
             v = e.get("value")
             if not isinstance(v, int) or isinstance(v, bool) or v < 0 or (total and v > total):
                 errors.append(f"{w}.value: must be a whole number from 0 to total")
+        if kind == "bars":
+            v = e.get("value")
+            if not isinstance(v, (int, float)) or isinstance(v, bool) or v < 0:
+                errors.append(f"{w}.value: must be a number of 0 or more")
+            if e.get("display") is not None and not isinstance(e["display"], str):
+                errors.append(f"{w}.display: expected a string")
         if kind == "code":
             if e.get("mark") is not None and e["mark"] not in MARKS:
                 errors.append(f"{w}.mark: must be one of {', '.join(MARKS)}")
@@ -802,15 +815,39 @@ def word_count(text):
 
 
 BODY_WORDS, SUMMARY_WORDS, PAGE_WORDS = 40, 60, 450
+ENTRY_WORDS, CAPTION_WORDS = 10, 16
 
 
 def exhibit_text(ex):
     parts = [ex.get("caption"), ex.get("left"), ex.get("right")]
+    if isinstance(ex.get("groups"), dict):
+        parts += list(ex["groups"].values())
     field = EXHIBITS.get(ex.get("type"), ("",))[0]
     for e in ex.get(field) or []:
         if isinstance(e, dict):
-            parts += [e.get(k) for k in ("left", "right", "text", "label", "sub")]
+            parts += [e.get(k) for k in ("left", "right", "text", "label", "sub", "display")]
     return " ".join(p for p in parts if isinstance(p, str))
+
+
+def exhibit_warnings(ex, where):
+    """A picture reads at a glance only when it says what to notice and its labels are phrases."""
+    warns = []
+    if not str(ex.get("caption") or "").strip():
+        warns.append(f"{where}: no caption. Start the picture with what to notice, in one short sentence.")
+    elif word_count(ex["caption"]) > CAPTION_WORDS:
+        warns.append(f"{where}.caption: {word_count(ex['caption'])} words. Keep it to {CAPTION_WORDS} or fewer.")
+    field = EXHIBITS.get(ex.get("type"), ("",))[0]
+    if ex.get("type") == "code":
+        return warns
+    for j, e in enumerate(ex.get(field) or []):
+        if not isinstance(e, dict):
+            continue
+        for k in ("left", "right", "text", "label", "sub"):
+            n = word_count(e.get(k))
+            if n > ENTRY_WORDS:
+                warns.append(f"{where}.{field}[{j}].{k}: {n} words. Exhibit entries are short phrases of "
+                             f"{ENTRY_WORDS} words or fewer; move the rest to the body or `detail`.")
+    return warns
 
 
 def text_warnings(b):
@@ -829,8 +866,10 @@ def text_warnings(b):
         if n > BODY_WORDS:
             warns.append(f"items[{i}].body: {n} words. Keep it to {BODY_WORDS} or fewer; move evidence to "
                          "`detail` (shown collapsed) or into the exhibit.")
-        if it.get("exhibit"):
+        ex = it.get("exhibit")
+        if isinstance(ex, dict):
             pictured += 1
+            warns += exhibit_warnings(ex, f"items[{i}].exhibit")
         elif it.get("kind") in ("call", "decided") or it.get("urgent"):
             warns.append(f"items[{i}]: {'the urgent' if it.get('urgent') else 'a ' + it.get('kind')} item has no exhibit. "
                          "Show the finding as a picture (see reference.md).")

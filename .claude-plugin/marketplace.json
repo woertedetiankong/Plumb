@@ -6,7 +6,7 @@
     {
       "name": "plumb",
       "source": "./plumb",
-      "description": "Briefings on what your coding agents did, checked against your project as it is now."
+      "description": "Briefings on what your coding agents did, checked against your project as it is now, and a map of what you understand."
     }
   ]
 }

@@ -59,6 +59,10 @@ code {
   display: flex; align-items: center; min-height: 40px; padding: 0 12px;
   border: 1px solid var(--line); border-radius: 8px; font-family: var(--mono); font-size: 14px;
 }
+.nav-link { display: flex; align-items: center; min-height: 40px; padding: 0 12px; border-radius: 8px; color: var(--ink); font-weight: 600; text-decoration: none; }
+.nav-link:hover { background: var(--chip); color: var(--ink); }
+.nav-link[aria-current="page"] { background: var(--chip); }
+.to-map { font-size: 14px; color: var(--ink-2); }
 .header-right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
 .watching { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }
 .dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 999px; background: var(--solid); }

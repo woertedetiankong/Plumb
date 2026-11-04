@@ -6,6 +6,10 @@ Subcommands (stdlib only, read-only on the user's project):
   digest    condense one session log into text an agent can read in one go
   state     summarize the project as it is now (git, processes, ports)
   render    validate a briefing JSON file and write it out as an HTML page
+  areas     show the project outline and saved map areas, or save areas (--set)
+  map       write the understanding map page
+  open      show the map or a briefing through Plumb's local page server
+  serve     run that server (open starts it; it stops after 30 idle minutes)
 
 Briefings are stored under $PLUMB_HOME (default ~/.plumb), never in the project.
 """
@@ -27,6 +31,10 @@ from pathlib import Path
 
 HOME = Path.home()
 SKILL_DIR = Path(__file__).resolve().parent.parent
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import mapserve  # noqa: E402  the map and the local server
+mapserve.P = sys.modules[__name__]
 
 
 def env_path(name, default):
@@ -914,6 +922,9 @@ def validate(b):
                 need(q, k, str, "question")
             need(q, "area", str, "question", optional=True)
             need(q, "why", str, "question", optional=True)
+            depth = q.get("depth")
+            if depth is not None and (not isinstance(depth, int) or isinstance(depth, bool) or not 1 <= depth <= 3):
+                errors.append("question.depth: 1 (contract), 2 (shape) or 3 (every line)")
             choices = need(q, "choices", list, "question") or []
             keys = []
             for j, c in enumerate(choices):
@@ -933,12 +944,15 @@ def validate(b):
     return errors
 
 
-def page_html(b):
+def page_html(b, has_map=False, server=""):
+    """The briefing page. has_map links to ../map.html; server is what the local server adds to <head>."""
     viewer = SKILL_DIR / "viewer"
     data = json.dumps(b, ensure_ascii=False).replace("</", "<\\/").replace("<!--", "<\\!--")
     template = (viewer / "briefing.html").read_text()
     return (template
             .replace("{{TITLE}}", html.escape(f"Briefing · {b['project']['name']} · {b['session']['title']}"))
+            .replace("<!--{{SERVER}}-->", server)
+            .replace("{{MAP}}", "../map.html" if has_map else "")
             .replace("/*{{CSS}}*/", (viewer / "briefing.css").read_text())
             .replace("/*{{JS}}*/", (viewer / "briefing.js").read_text())
             .replace("{{DATA}}", data))
@@ -949,7 +963,7 @@ def save_briefing(b, store):
     out.mkdir(parents=True, exist_ok=True)
     (out / f"{b['id']}.json").write_text(json.dumps(b, ensure_ascii=False, indent=2))
     page = out / f"{b['id']}.html"
-    page.write_text(page_html(b))
+    page.write_text(page_html(b, has_map=(store / "areas.json").exists()))
     return page
 
 
@@ -1002,6 +1016,11 @@ def cmd_render(args):
         (store / "index.json").write_text(json.dumps(idx, indent=2))
     except OSError:
         pass  # the page matters; the "briefed" marker is a convenience
+    if (store / "areas.json").exists():
+        try:
+            mapserve.refresh_pages(root)  # the map counts this briefing's calls and question
+        except Exception as err:  # the briefing is written; a map problem mustn't hide it
+            print(f"plumb: the briefing is saved, but the map couldn't be updated: {err}", file=sys.stderr)
     print(f"Briefing page: {page}")
     if note:
         print(note)
@@ -1029,7 +1048,8 @@ def codex_skill_text(src, target, name):
     body = (src[m.end():]
             .replace(" --exclude ${CLAUDE_SESSION_ID}", "")
             .replace("${CLAUDE_SKILL_DIR}", str(target))
-            .replace("(`$ARGUMENTS`)", "(in their request)"))
+            .replace("(`$ARGUMENTS`)", "(in their request)")
+            .replace("/plumb:brief", "$plumb-brief").replace("/plumb:map", "$plumb-map"))
     left = re.findall(r"\$\{CLAUDE_[A-Z_]+\}|\$ARGUMENTS", body)
     if left:
         raise SystemExit(f"plumb: SKILL.md still has Claude Code placeholders after conversion: {', '.join(sorted(set(left)))}")
@@ -1052,9 +1072,25 @@ def cmd_install(args):
         '  short_description: "Briefings on what your coding agents did, checked against the project now"\n'
         f'  default_prompt: "Use ${args.name} to brief me on a recent agent session in this project."\n')
     (target / INSTALL_MARKER).write_text(json.dumps({"from": str(SKILL_DIR), "installed": dt.datetime.now().isoformat(timespec="seconds")}) + "\n")
-    print(f"Installed the Plumb skill for Codex at {tilde(target)}.")
-    print(f"In Codex, type ${args.name}, or ask to be briefed on a recent agent session. "
-          f"Run this command again after updating Plumb.")
+    # The map skill is one file that runs the brief skill's script.
+    map_src = SKILL_DIR.parent / "map" / "SKILL.md"
+    map_target = Path(args.dir).expanduser() / args.map_name
+    installed_map = False
+    if map_src.exists() and not (map_target.exists() and not (map_target / INSTALL_MARKER).exists()):
+        if map_target.exists():
+            shutil.rmtree(map_target)
+        map_target.mkdir(parents=True)
+        text = map_src.read_text().replace("${CLAUDE_SKILL_DIR}/../brief", str(target))
+        (map_target / "SKILL.md").write_text(codex_skill_text(text, map_target, args.map_name))
+        (map_target / INSTALL_MARKER).write_text(json.dumps({"from": str(map_src.parent)}) + "\n")
+        installed_map = True
+    elif map_src.exists():
+        print(f"plumb: {tilde(map_target)} exists and wasn't installed by Plumb; skipped the map skill. Use --map-name.",
+              file=sys.stderr)
+    print(f"Installed the Plumb skill for Codex at {tilde(target)}" + (f", and the map at {tilde(map_target)}." if installed_map else "."))
+    print(f"In Codex, type ${args.name}, or ask to be briefed on a recent agent session"
+          + (f"; ${args.map_name} shows your understanding map" if installed_map else "")
+          + ". Run this command again after updating Plumb.")
     return 0
 
 
@@ -1081,10 +1117,29 @@ def main(argv=None):
     r.add_argument("--open", action="store_true", help="open the page in the browser")
     r.add_argument("--out", help="write here instead of the Plumb store (used by tests)")
     r.set_defaults(func=cmd_render)
+    a = sub.add_parser("areas", help="show the project outline and saved map areas, or save areas")
+    a.add_argument("--project", help="project folder (default: this one)")
+    a.add_argument("--set", metavar="FILE", help="save areas from a JSON file, or - for stdin")
+    a.add_argument("--json", action="store_true", help="(output is always JSON)")
+    a.set_defaults(func=mapserve.cmd_areas)
+    m = sub.add_parser("map", help="write the understanding map page")
+    m.add_argument("--project", help="project folder (default: this one)")
+    m.add_argument("--json", action="store_true", help="print the map data instead")
+    m.set_defaults(func=mapserve.cmd_map)
+    o = sub.add_parser("open", help="show the map or a briefing through Plumb's local page server")
+    o.add_argument("target", nargs="?", default="map", help="map (default) or a briefing id")
+    o.add_argument("--project", help="project folder (default: this one)")
+    o.add_argument("--no-browser", action="store_true", help="print the address without opening it")
+    o.add_argument("--no-server", action="store_true", help="open the plain file instead")
+    o.set_defaults(func=mapserve.cmd_open)
+    v = sub.add_parser("serve", help="run the local page server (open starts it)")
+    v.add_argument("--port", type=int, help=f"first port to try (default {mapserve.DEFAULT_PORT} or $PLUMB_PORT)")
+    v.set_defaults(func=mapserve.cmd_serve)
     i = sub.add_parser("install", help="install the skill for another agent (codex)")
     i.add_argument("agent", choices=["codex"])
     i.add_argument("--dir", default=str(HOME / ".agents" / "skills"), help="skills folder (default: ~/.agents/skills)")
     i.add_argument("--name", default="plumb-brief", help="skill name in that agent (default: plumb-brief)")
+    i.add_argument("--map-name", default="plumb-map", help="map skill name in that agent (default: plumb-map)")
     i.set_defaults(func=cmd_install)
     args = parser.parse_args(argv)
     return args.func(args)

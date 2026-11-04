@@ -1,11 +1,11 @@
 {
   "name": "plumb",
   "displayName": "Plumb",
-  "version": "0.1.0",
-  "description": "Briefings on what your coding agents did, checked against your project as it is now, with one question to make sure you understand the part that matters.",
+  "version": "0.2.0",
+  "description": "Briefings on what your coding agents did, checked against your project as it is now, and a map of which parts you understand as deeply as their stakes need.",
   "author": { "name": "woerte", "url": "https://github.com/woertedetiankong" },
   "homepage": "https://github.com/woertedetiankong/Plumb",
   "repository": "https://github.com/woertedetiankong/Plumb",
   "license": "MIT",
-  "keywords": ["briefing", "code review", "agents", "understanding"]
+  "keywords": ["briefing", "code review", "agents", "understanding", "map"]
 }

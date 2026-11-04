@@ -18,7 +18,7 @@ The user lets agents write code they don't read line by line. Tell them what the
 
 ## Ground rules
 
-- **Read only.** Don't edit, commit, stash, install, stop processes, or run anything that deploys, sends messages, costs money, or takes more than about 2 minutes unless the user agrees first. The only files you write are the briefing JSON (in a temp folder outside the project) and what `render` writes under `~/.plumb`.
+- **Read only.** Don't edit, commit, stash, install, stop processes, or run anything that deploys, sends messages, costs money, or takes more than about 2 minutes unless the user agrees first. The only files you write are the briefing JSON (in a temp folder outside the project) and what `render` writes under `~/.plumb`. The only process Plumb leaves running is its own page server, which `open` starts on 127.0.0.1 and which stops after 30 idle minutes.
 - **Never print a secret.** Logs hold whatever the user pasted and whatever the agent ran. `plumb.py` hides common key formats, but if you still see something that looks like a key, password or token, don't repeat it; name it instead ("the MiniMax key"). To check whether a key leaked, compare inside a script and print only counts.
 - **State as fact only what you checked.** Anything you couldn't check goes in a `unchecked` item.
 - **Write in the language the user writes to you in.**
@@ -64,15 +64,21 @@ The user lets agents write code they don't read line by line. Tell them what the
 6. **Write one explain-it-back question.** Ask about the mechanism with the highest stakes that the user is least likely to understand. Usually that's behavior a real user, caller or customer will run into.
    - It must be answerable by understanding the code, not by remembering the briefing. Don't give the answer away in an item.
    - Give 4 choices with exactly one right. Each wrong choice should be a real misconception, with a `note` saying why it's wrong.
+   - `area` is the file the question is about, as a path relative to the project. It decides which area of the user's map a right answer counts for.
+   - `depth` is what a right answer shows: `1` the contract (what goes in and comes out), `2` the shape (how the parts connect, the path a request takes), `3` every line (what specific lines do in an edge case). Most questions are `2`.
    - `explanation` says what actually happens. `path` walks through it step by step with `file:line` refs and marks the steps where it goes wrong as `bad`. `why` links it to an item.
    - Vary which letter is right.
    - If nothing in the session deserves a question (docs-only work, say), set `question` to `null`.
 
-7. **Write and render the page.** Write the briefing JSON to a temp file outside the project (the format is in [reference.md](reference.md)), then run:
-   `python3 ${CLAUDE_SKILL_DIR}/scripts/plumb.py render <file> --open`
+7. **Write, render and open the page.** Write the briefing JSON to a temp file outside the project (the format is in [reference.md](reference.md)), then run:
+   `python3 ${CLAUDE_SKILL_DIR}/scripts/plumb.py render <file>`
    If it lists errors, fix the JSON and run it again. If it lists warnings about length or missing exhibits, fix those too and render again. If it says the page went to a temporary folder, pass that note on to the user. If it can't save the page at all (a read-only sandbox), give the briefing in chat instead: the items as a short list, then the question with its choices, and the answer only after the user replies.
 
-8. **Reply in chat in 3 to 5 lines.** Name the session, give the most urgent item in one sentence, give the page's path, and say the question is on the page. Don't paste the briefing. Offer to explain any item or act on a call, and act only if they ask.
+   Then open it:
+   `python3 ${CLAUDE_SKILL_DIR}/scripts/plumb.py open <briefing id>`
+   It serves the page from Plumb's local server, so the user's picks and answer are saved and their map (`/plumb:map`) counts them. If the server can't start, it opens the plain file and says so; pass that on.
+
+8. **Reply in chat in 3 to 5 lines.** Name the session, give the most urgent item in one sentence, give the address `open` printed, and say the question is on the page. If the user has no map yet, say in one line that `/plumb:map` sets one up. Don't paste the briefing. Offer to explain any item or act on a call, and act only if they ask.
 
 ## Writing
 

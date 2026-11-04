@@ -35,7 +35,24 @@
     return MARK[s] ? `<span class="mark m-${s}" role="img" aria-label="${MARK[s].label}">${MARK[s].icon}</span>` : "";
   }
 
+  // Served by `plumb.py open`: picks and the answer are saved to ~/.plumb, so the map can use them.
+  // Opened as a plain file: they stay in this browser's storage.
+  const SRV = (() => {
+    const m = document.querySelector('meta[name="plumb-server"]');
+    try { return m ? JSON.parse(m.content) : null; } catch (e) { return null; }
+  })();
+  const MAP = SRV ? SRV.map : document.body.dataset.map || "";
+
   function load() {
+    const served = document.getElementById("plumb-state");
+    if (SRV && served) {
+      try {
+        const s = JSON.parse(served.textContent);
+        const picks = {};
+        Object.keys(s.picks || {}).forEach((k) => { picks[k] = Number(s.picks[k]); });
+        return { picks, answer: s.answer ?? null };
+      } catch (e) { /* fall through to browser storage */ }
+    }
     try {
       const s = JSON.parse(localStorage.getItem(KEY) || "{}");
       return { picks: s.picks || {}, answer: s.answer ?? null };
@@ -43,8 +60,15 @@
       return { picks: {}, answer: null };
     }
   }
-  function save() {
+  function save(change) {
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* storage blocked: still works for this visit */ }
+    if (!SRV || !change) return;
+    fetch("/api/record", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Plumb-Token": SRV.token },
+      body: JSON.stringify({ store: SRV.store, briefing: B.id, change })
+    }).then((r) => { if (!r.ok) throw new Error(r.status); })
+      .catch(() => toast("Couldn't save to Plumb (its page server may have stopped). Kept in this browser."));
   }
   const state = load();
   let questionOpen = false;
@@ -364,6 +388,7 @@
           <div class="body">${md(q.explanation)}</div>
           ${q.path && q.path.length ? `<div class="path"><p class="label">What happens, step by step</p>${exhibitHTML({ type: "flow", steps: q.path })}</div>` : ""}
           ${q.why ? `<div class="why body">${md(q.why)}</div>` : ""}
+          ${MAP && q.area ? `<p class="to-map">${right ? "Your map now counts this for" : "Your map still shows a gap in"} <code>${esc(shortPath(q.area))}</code>${SRV ? "" : " once you open it with <code>plumb.py open</code>"}. <a href="${esc(MAP)}">See the map</a></p>` : ""}
         </div>`;
     }
     return `
@@ -421,6 +446,7 @@
   function render() {
     const s = B.session;
     $("project").textContent = B.project.name;
+    if (MAP) { $("map-link").href = MAP; $("map-link").hidden = false; }
     const c = when(B.created);
     $("meta").textContent = "Briefed " + (c ? day(c) + ", " + clock(B.created) : B.created) + " · " + (AGENT[s.agent] || s.agent);
     $("app").innerHTML = `
@@ -457,7 +483,7 @@
       const i = Number(opt.dataset.item), j = Number(opt.dataset.opt);
       const o = B.items[i].options[j];
       state.picks[i] = j;
-      save();
+      save({ item: i, opt: j });
       opt.parentElement.querySelectorAll(".opt").forEach((b) => b.setAttribute("aria-pressed", String(b === opt)));
       $("picked-" + i).innerHTML = pickedText(o);
       updateProgress();
@@ -472,7 +498,7 @@
     const ans = e.target.closest(".answer");
     if (ans && !ans.disabled) {
       state.answer = ans.dataset.key;
-      save();
+      save({ answer: state.answer });
       renderQuestion();
       markSteps();
       const t = $("fb-title");
@@ -484,6 +510,7 @@
       state.answer = null;
       questionOpen = false;
       try { localStorage.removeItem(KEY); } catch (err) { /* nothing stored */ }
+      save({ clear: true });
       render();
       toast("Your answers are cleared.");
     }

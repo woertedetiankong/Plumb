@@ -58,7 +58,8 @@ Every exhibit has a `type` and an optional `caption` (one sentence: what to noti
 
 | Field | Type | Notes |
 |---|---|---|
-| `area` | string | Optional. The file or part of the code it's about. |
+| `area` | string | Optional. The file the question is about, relative to the project. A right answer counts for the map area that holds it. |
+| `depth` | number | Optional. What a right answer shows: `1` contract, `2` shape (the default), `3` every line. |
 | `text` | string | The question. Describe a concrete situation. |
 | `choices` | list | 4 choices of `{ "key": "A", "text": "...", "note": "why this is wrong" }`. The right choice needs no note. |
 | `answer` | string | The key of the right choice. |

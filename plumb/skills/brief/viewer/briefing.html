@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{TITLE}}</title>
+<!--{{SERVER}}-->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
@@ -11,11 +12,12 @@
 /*{{CSS}}*/
 </style>
 </head>
-<body>
+<body data-map="{{MAP}}">
 <header class="site-header">
   <div class="header-inner">
     <span class="brand"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1.5V4"/><path d="M7 9a5 5 0 0 1 10 0c0 3-2.5 7-5 12.5C9.5 16 7 12 7 9z"/></svg>Plumb</span>
     <span id="project" class="repo-chip"></span>
+    <a id="map-link" class="nav-link" href="#" hidden>Map</a>
     <div class="header-right"><span class="watching"><span class="dot" aria-hidden="true"></span><span id="meta"></span></span></div>
   </div>
 </header>

@@ -18,6 +18,7 @@ HERE = Path(__file__).resolve().parent
 SKILL = HERE.parent / "skills" / "brief"
 sys.path.insert(0, str(SKILL / "scripts"))
 import plumb  # noqa: E402
+import mapserve  # noqa: E402
 
 # Built at runtime so no key-shaped literal sits in the repo.
 FAKE_SK = "sk-" + "Ab3" * 12
@@ -350,6 +351,139 @@ class SandboxFallbackTest(Env):
             tempfile.tempdir = old
 
 
+class MapTest(Env):
+    AREAS = {"areas": [
+        {"id": "refunds", "name": "payments", "paths": ["payments"], "need": 3, "why": "it moves money"},
+        {"id": "web", "name": "web", "paths": ["web"], "need": 0, "why": ""}]}
+
+    def setUp(self):
+        super().setUp()
+        (self.project / "payments" / "refunds.py").write_text("a\n" * 10)
+        (self.project / "payments" / "webhooks.py").write_text("a\n" * 4)
+        (self.project / "web").mkdir()
+        (self.project / "web" / "app.js").write_text("a\n" * 5)
+        (self.project / "README.md").write_text("hello")
+        self.store = plumb.store_dir(self.project)
+        src = Path(self.tmp.name) / "areas.json"
+        src.write_text(json.dumps(self.AREAS))
+        with redirect_stdout(StringIO()):
+            self.assertEqual(plumb.main(["areas", "--project", str(self.project), "--set", str(src)]), 0)
+        b = json.loads((SKILL / "examples" / "shopfront.json").read_text())
+        b["project"]["path"] = str(self.project)
+        self.bid = b["id"]
+        bsrc = Path(self.tmp.name) / "b.json"
+        bsrc.write_text(json.dumps(b))
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            self.assertEqual(plumb.main(["render", str(bsrc)]), 0)
+
+    def area(self, aid):
+        return {a["id"]: a for a in mapserve.map_data(self.project)["areas"]}[aid]
+
+    def answers(self, data):
+        mapserve.write_json(self.store / "answers.json", data)
+
+    def test_validate_areas(self):
+        bad = {"areas": [
+            {"id": "a", "name": "a", "paths": ["/etc"], "need": 3, "why": "x"},
+            {"id": "a", "name": "b", "paths": ["../up"], "need": 5},
+            {"id": "c", "name": "c", "paths": ["src"], "need": 2},
+            {"id": "d", "name": "d", "paths": ["src/"], "need": 0}]}
+        errors = "\n".join(mapserve.validate_areas(bad))
+        for expected in ("areas[0].paths: '/etc'", "areas[1].id: 'a' is used twice", "areas[1].paths: '../up'",
+                         "areas[1].need", "areas[2].why", "'src' is already in area 'c'"):
+            self.assertIn(expected, errors)
+        self.assertEqual(mapserve.validate_areas(self.AREAS), [])
+
+    def test_sizes_and_starting_state(self):
+        data = mapserve.map_data(self.project)
+        refunds = self.area("refunds")
+        self.assertEqual((refunds["lines"], refunds["files"]), (14, 2))
+        self.assertEqual(data["unmapped"], {"lines": 1, "files": 1})
+        self.assertEqual(refunds["status"], "unknown")  # no evidence is not a gap
+        self.assertEqual(self.area("web")["status"], "ok")
+        self.assertEqual(len(refunds["calls"]), 1)  # the webhook call; the migration's file isn't in an area
+        self.assertEqual(refunds["pending"]["briefing"], self.bid)
+        self.assertEqual(refunds["changed"]["sessions"], 1)  # the Claude log edited payments/refunds.py
+
+    def test_evidence_replays_in_order(self):
+        self.answers({"briefings": {self.bid: {"picks": {"0": 0}, "answer": {"key": "B", "at": "2026-11-01 09:00"}}}})
+        a = self.area("refunds")
+        self.assertEqual((a["you"], a["status"], a["source"], a["stale"]), (2, "thin", "question", False))
+        self.assertEqual(a["calls"], [])  # picked
+        self.assertIsNone(a["pending"])
+        self.answers({"briefings": {self.bid: {"answer": {"key": "B", "at": "2026-11-01 09:00"}}},
+                      "areas": {"refunds": {"level": 3, "at": "2026-11-02 09:00"}}})
+        self.assertEqual((self.area("refunds")["you"], self.area("refunds")["status"]), (3, "solid"))
+        self.answers({"briefings": {self.bid: {"answer": {"key": "A", "at": "2026-11-02 10:00"}}},
+                      "areas": {"refunds": {"level": 3, "at": "2026-11-02 09:00"}}})
+        self.assertEqual((self.area("refunds")["you"], self.area("refunds")["status"]), (1, "gap"))  # wrong at shape caps it at contract
+
+    def test_agent_changes_after_a_check_lower_it(self):
+        # The fixture's Claude session edited payments/refunds.py on 2026-10-29; this answer came before it.
+        self.answers({"briefings": {self.bid: {"answer": {"key": "B", "at": "2026-10-28 09:00"}}}})
+        a = self.area("refunds")
+        self.assertEqual((a["you"], a["stale"], a["status"]), (1, True, "gap"))
+
+    def test_record_and_levels(self):
+        with self.assertRaises(ValueError):
+            mapserve.record(self.store, self.bid, {"answer": "Z"})
+        with self.assertRaises(ValueError):
+            mapserve.record(self.store, self.bid, {"item": 3, "opt": 0})  # an fyi item has no options
+        with self.assertRaises(ValueError):
+            mapserve.record(self.store, "nope", {"answer": "B"})
+        mapserve.record(self.store, self.bid, {"answer": "A"})
+        mapserve.record(self.store, self.bid, {"answer": "B"})  # the first answer counts
+        mapserve.record(self.store, self.bid, {"item": 0, "opt": 1})
+        self.assertEqual(mapserve.briefing_state(self.store, self.bid), {"picks": {"0": 1}, "answer": "A"})
+        mapserve.record(self.store, self.bid, {"clear": True})
+        self.assertEqual(mapserve.briefing_state(self.store, self.bid), {"picks": {}, "answer": None})
+        mapserve.set_need(self.store, "web", 2)
+        self.assertIn("you said so", json.loads((self.store / "areas.json").read_text())["areas"][1]["why"])
+        with self.assertRaises(ValueError):
+            mapserve.set_level(self.store, "nope", 2)
+
+    def test_pages_link_to_the_map(self):
+        page = (self.store / "briefings" / f"{self.bid}.html").read_text()
+        self.assertIn('data-map="../map.html"', page)
+        self.assertTrue((self.store / "map.html").exists())
+        self.assertIn("map-data", (self.store / "map.html").read_text())
+
+    def test_server_guards(self):
+        import http.client
+        import threading
+        from http.server import ThreadingHTTPServer
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), mapserve.Handler)
+        mapserve.Handler.port, mapserve.Handler.token = httpd.server_port, "tok"
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        port = httpd.server_port
+
+        def req(method, path, body=None, headers=None):
+            c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            h = {"Host": f"127.0.0.1:{port}", "Content-Type": "application/json"}
+            h.update(headers or {})
+            c.request(method, path, body=json.dumps(body) if body is not None else None, headers=h)
+            r = c.getresponse()
+            data = r.read()
+            c.close()
+            return r.status, data
+        try:
+            name = self.store.name
+            self.assertEqual(req("GET", f"/p/{name}/map")[0], 200)
+            status, page = req("GET", f"/p/{name}/b/{self.bid}")
+            self.assertEqual(status, 200)
+            self.assertIn(b'name="plumb-server"', page)
+            self.assertEqual(req("GET", f"/p/{name}/map", headers={"Host": f"evil.example:{port}"})[0], 403)
+            body = {"store": name, "briefing": self.bid, "change": {"answer": "B"}}
+            self.assertEqual(req("POST", "/api/record", body)[0], 403)  # no token
+            self.assertEqual(req("POST", "/api/record", body, {"X-Plumb-Token": "tok", "Origin": "https://evil.example"})[0], 403)
+            self.assertEqual(req("POST", "/api/record", body, {"X-Plumb-Token": "tok"})[0], 200)
+            self.assertEqual(mapserve.briefing_state(self.store, self.bid)["answer"], "B")
+            self.assertEqual(req("POST", "/api/record", {"store": "../x", "briefing": self.bid}, {"X-Plumb-Token": "tok"})[0], 404)
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+
+
 class InstallTest(unittest.TestCase):
     def test_codex_install(self):
         with tempfile.TemporaryDirectory() as d:
@@ -367,6 +501,11 @@ class InstallTest(unittest.TestCase):
             for f in ("scripts/plumb.py", "viewer/briefing.js", "reference.md", "examples/shopfront.json", "agents/openai.yaml"):
                 self.assertTrue((target / f).exists(), f)
             self.assertFalse(list(target.rglob("__pycache__")))
+            mtext = (Path(d) / "plumb-map" / "SKILL.md").read_text()
+            self.assertIn("name: plumb-map\n", mtext)
+            self.assertNotIn("${CLAUDE_", mtext)
+            self.assertIn(f"python3 {target}/scripts/plumb.py open map", mtext)
+            self.assertIn("$plumb-brief", mtext)
             # Installing again replaces Plumb's own copy...
             with redirect_stdout(StringIO()):
                 self.assertEqual(plumb.main(["install", "codex", "--dir", d]), 0)
